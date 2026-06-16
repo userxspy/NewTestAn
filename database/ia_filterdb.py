@@ -29,11 +29,13 @@ db = client[DATABASE_NAME]
 primary = db["Primary"]
 cloud   = db["Cloud"]
 archive = db["Archive"]
+actors  = db["Actors"]  # 🎭 नया: एक्टर प्रोफाइल के लिए डेटाबेस कलेक्शन
 
 COLLECTIONS = {
     "primary": primary,
     "cloud":   cloud,
     "archive": archive,
+    "actors":  actors,   # 🔄 नया: मास्टर डिक्शनरी में सिंक किया
 }
 
 # ⚡ GLOBAL STATUS EXPENSIVE COUNT CACHE
@@ -47,6 +49,10 @@ STATS_CACHE_TTL = 60  # ६० सेकंड का सेफ कैशे ब
 async def ensure_indexes():
     for name, col in COLLECTIONS.items():
         try:
+            # 🛑 सेफ़्टी गॉर्ड: एक्टर्स कलेक्शन को इस मूवी लूप से बाहर रखें, वरना गलत इंडेक्स ब्लोट होगा
+            if name == "actors":
+                continue
+
             # ✅ कम्पाउंड टेक्स्ट इंडेक्स में से ब्लोट हटाया गया
             if USE_CAPTION_FILTER:
                 await col.create_index(
@@ -71,6 +77,14 @@ async def ensure_indexes():
                 pass
             else:
                 logger.warning(f"Index warning [{name}]: {e}")
+
+    # ─── 🎭 एक्टर कलेक्शन का विशेष टेक्स्ट इंडेक्स (लूप के बाहर) ───
+    try:
+        await actors.create_index([("name", "text")], name="actors_name_text")
+        logger.info("✅ Actor Profile System Indexes OK")
+    except Exception as e:
+        if "already exists" not in str(e) and "IndexKeySpecsConflict" not in str(e):
+            logger.warning(f"Actor Index warning: {e}")
 
 # ─────────────────────────────────────────────────────────
 # 📊 DB STATS — With Smart String-Type Query & 60s Cache Guard
@@ -259,6 +273,7 @@ async def get_search_results(query, max_results, offset=0, lang=None, collection
     actual_src = collection_type
 
     if collection_type == "all":
+        # 🛑 सेफ़्टी अलर्ट: 'all' सर्च के दौरान एक्टर्स कलेक्शन को बाईपास करें क्योंकि हमें केवल फाइल्स चाहिए
         for src, col in [("primary", primary), ("cloud", cloud), ("archive", archive)]:
             docs, cnt = await _search(col, raw_query, regex, offset, max_results, lang, bypass_count=bypass_count)
             if docs:
@@ -287,7 +302,7 @@ async def delete_files(query, collection_type="all"):
     deleted = 0
     try:
         if query == "*":
-            cols = [col for name, col in COLLECTIONS.items() if collection_type == "all" or name == collection_type]
+            cols = [col for name, col in COLLECTIONS.items() if (collection_type == "all" or name == collection_type) and name != "actors"]
             for col in cols:
                 res = await col.delete_many({})
                 deleted += res.deleted_count
@@ -298,7 +313,7 @@ async def delete_files(query, collection_type="all"):
             return 0
 
         flt   = {"file_name": regex}
-        cols  = [col for name, col in COLLECTIONS.items() if collection_type == "all" or name == collection_type]
+        cols  = [col for name, col in COLLECTIONS.items() if (collection_type == "all" or name == collection_type) and name != "actors"]
 
         for col in cols:
             res = await col.delete_many(flt)
