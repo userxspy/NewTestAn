@@ -100,7 +100,7 @@ async def get_actor_photo(req):
         file_data.close()
         del file_data
         
-        # 1 साल का कड़क ब्राउज़र कैशे कवच ताकि कोयब पर लोड 0 रहे
+        # 1 साल का ब्राउज़र कैशे कवच
         headers = {
             "Cache-Control": "public, max-age=31536000, immutable",
             "Content-Disposition": 'inline; filename="actor.jpg"'
@@ -126,7 +126,6 @@ async def actor_profile_display(req):
     except:
         return web.Response(text="Invalid ID", status=400)
         
-    # आटोमेटिक सर्च फ़िल्टर पाइपलाइन (एक्टर का नाम फ़ाइल नाम में मैच करेगा)
     actor_name = actor["name"]
     video_docs, _, _, _ = await get_search_results(
         query=actor_name, max_results=30, offset=0, collection_type="all", bypass_count=True
@@ -176,7 +175,7 @@ async def actor_profile_display(req):
             <div style="width:160px; height:220px; background:var(--bg3); border-radius:8px; overflow:hidden; border:1px solid var(--border); flex-shrink:0;">
                 <img src="/api/actor/photo?id={actor_id}" style="width:100%; height:100%; object-fit:cover;">
             </div>
-            <div style="默默; flex:1; min-width:300px; display:flex; flex-direction:column; justify-content:center;">
+            <div style="flex:1; min-width:300px; display:flex; flex-direction:column; justify-content:center;">
                 <h1 style="font-size:32px; font-weight:900; color:var(--text); margin-bottom:6px;">{actor_name}</h1>
                 <div style="font-size:12px; color:var(--accent); font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">🌟 Superstar Profile</div>
                 <p style="color:var(--muted); font-size:14px; line-height:1.6; max-width:700px;">Managed by Fast Finder Core Engine.</p>
@@ -208,12 +207,9 @@ async def actor_profile_display(req):
 
     <script>
         function switchActorTab(evt, tabId) {
-            // सारे पैनल्स छुपाओ
             document.querySelectorAll('.actor-panel').forEach(p => p.classList.remove('active'));
-            // सारे टैब्स डीएक्टिवेट करो
             document.querySelectorAll('.actor-tab').forEach(t => t.classList.remove('active'));
             
-            // करंट टैब और पैनल एक्टिवेट करो
             document.getElementById(tabId).classList.add('active');
             evt.currentTarget.classList.add('active');
         }
