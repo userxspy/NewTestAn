@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Fast Finder</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css"/>
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+
+        :root{
+            --bg:#141414;
+            --bg2:#000;
+            --bg3:#2b2b2b;
+            --bg4:#1f1f1f;
+            --card:#181818;
+            --accent:#e50914;
+            --accent-hover:#c0000f;
+            --text:#fff;
+            --muted:#808080;
+            --border:rgba(128,128,128,0.2);
+        }
+
+        body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;padding-bottom:40px;-webkit-user-select:none;user-select:none;}
+
+        /* ── Topbar ── */
+        .topbar{background:var(--bg2);padding:0 16px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--border);backdrop-filter:blur(10px);}
+        .logo{font-size:17px;font-weight:900;letter-spacing:1px;color:var(--accent);display:flex;align-items:center;gap:8px}
+        .nf-icon{background:var(--accent);color:#fff;padding:2px 7px;border-radius:3px;font-size:16px;line-height:1.4;font-weight:900}
+        .mode-select{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;color:var(--text);outline:none;cursor:pointer;font-family:inherit;}
+
+        /* ── Search zone ── */
+        .search-zone{padding:12px 16px 0;background:var(--bg);position:sticky;top:52px;z-index:90;box-shadow:0 4px 12px rgba(0,0,0,0.3);overflow:visible;}
+        .search-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+        .search-wrap{flex:1;min-width:0;display:flex;align-items:center;background:var(--bg3);border:1.5px solid var(--border);border-radius:12px;padding:0 6px 0 14px;gap:8px;overflow:hidden;min-height:38px;transition:border-color .18s}
+        .search-wrap:focus-within{border-color:var(--accent)}
+        .search-input{flex:1;min-width:0;background:transparent;border:none;outline:none;color:var(--text);caret-color:var(--accent);font-size:14px;font-weight:600;padding:6px 0;font-family:inherit;-webkit-tap-highlight-color:transparent}
+        .search-input::placeholder{color:var(--muted);font-weight:400}
+        .search-btn{flex-shrink:0;background:var(--accent);color:#fff;border:none;border-radius:12px;padding:0 18px;height:38px;font-size:14px;font-weight:700;cursor:pointer;transition:transform .15s,box-shadow .15s;letter-spacing:.3px}
+        .search-btn:active{transform:scale(.95)}
+
+        /* ── Filter dropdowns ── */
+        .filters{display:flex;gap:8px;white-space:nowrap;scrollbar-width:none;padding-bottom:16px;overflow:visible;}
+        .filters::-webkit-scrollbar{display:none}
+        .cdd-wrap{flex:0 1 auto;min-width:0;position:relative;user-select:none}
+        .cdd-btn{background:var(--bg3);color:var(--text);border:1.5px solid var(--border);border-radius:999px;padding:7px 28px 7px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition:border-color .15s,box-shadow .15s;position:relative}
+        .cdd-btn:active,.cdd-btn.open{border-color:var(--accent);box-shadow:0 0 0 3px rgba(229,9,20,.12)}
+        .cdd-arrow{position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:9px;color:var(--muted);transition:transform .2s}
+        .cdd-btn.open .cdd-arrow{transform:translateY(-50%) rotate(180deg)}
+        .cdd-menu{position:fixed;min-width:160px;background:var(--bg4);border:1.5px solid var(--border);border-radius:16px;overflow:hidden;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.55);animation:cddIn .15s ease;display:none}
+        .cdd-menu.open{display:block}
+        @keyframes cddIn{from{opacity:0;transform:translateX(-50%) translateY(-6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+        .cdd-item{display:flex;align-items:center;gap:10px;padding:12px 14px;font-size:13px;font-weight:700;color:var(--text);cursor:pointer;transition:background .12s;border-bottom:1px solid var(--border)}
+        .cdd-item:last-child{border-bottom:none}
+        .cdd-item:active{background:var(--bg3)}
+        .cdd-item.selected{color:var(--accent)}
+        .cdd-radio{width:16px;height:16px;border-radius:50%;border:2px solid var(--border);margin-left:auto;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color .15s}
+        .cdd-item.selected .cdd-radio{border-color:var(--accent)}
+        .cdd-radio-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);display:none}
+        .cdd-item.selected .cdd-radio-dot{display:block}
+
+        /* ── Results grid ── */
+        .main{padding:12px 12px 0}
+        .res-grid{display:grid;grid-template-columns:1fr;gap:4px;margin-bottom:24px}
+        @media(min-width:480px){.res-grid{grid-template-columns:repeat(2,1fr);gap:10px}}
+        .res-grid.mode-none .poster-box{display:none}
+
+        /* ── File card ── */
+        .file-card{background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--border);cursor:pointer;transition:border-color .2s}
+        .file-card:active{border-color:rgba(229,9,20,.5)}
+
+        /* ── Poster ── */
+        .poster-box{position:relative;padding-top:56.25%;background:var(--bg3);overflow:hidden}
+        .fc-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+        .poster-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:5px;padding:7px 8px}
+        .type-chip{background:rgba(0,0,0,.75);backdrop-filter:blur(8px);color:#fff;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:800;letter-spacing:.8px;border:1px solid rgba(255,255,255,.14)}
+        .size-chip{background:rgba(0,0,0,.60);backdrop-filter:blur(8px);color:#e0e0e0;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,.08)}
+        .source-pill{margin-left:auto;border-radius:20px;padding:2px 8px;font-size:9px;font-weight:700;letter-spacing:.4px;display:inline-flex;align-items:center;gap:4px}
+        .source-pill.primary{background:#14532d;color:#4ade80;border:1px solid #22c55e}
+        .source-pill.cloud{background:#1e3a5f;color:#93c5fd;border:1px solid #60a5fa}
+        .source-pill.archive{background:#7c2d12;color:#fdba74;border:1px solid #fb923c}
+        .source-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+        .primary .source-dot{background:#22c55e;box-shadow:0 0 4px #22c55e}
+        .cloud .source-dot{background:#60a5fa;box-shadow:0 0 4px #60a5fa}
+        .archive .source-dot{background:#fb923c;box-shadow:0 0 4px #fb923c}
+        .thumb-error{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,.55);gap:6px;padding:10px;backdrop-filter:blur(5px)}
+        .thumb-error span{font-size:10px;color:var(--muted);text-align:center}
+        .retry-btn{background:var(--accent);color:#fff;border:none;padding:5px 12px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit}
+
+        /* ── Card body ── */
+        .fc-body{padding:9px 10px 11px}
+.fc-meta{font-size:11px;color:var(--muted);font-weight:500;margin-bottom:2px}
+
+        /* ── Text mode info ── */
+        .fc-text-info{display:flex;align-items:center;gap:6px;padding:9px 10px 0;flex-wrap:wrap;margin-bottom:4px}
+        .tc-type{background:var(--bg4);color:var(--muted);border-radius:5px;padding:2px 7px;font-size:9px;font-weight:800;letter-spacing:.8px;border:1px solid var(--border)}
+        .tc-size{color:var(--muted);font-size:11px}
+        .tc-pill{border-radius:20px;padding:2px 8px;font-size:9px;font-weight:700;letter-spacing:.4px;display:inline-flex;align-items:center;gap:4px}
+        .tc-pill.primary{background:#14532d;color:#4ade80;border:1px solid #22c55e}
+        .tc-pill.cloud{background:#1e3a5f;color:#93c5fd;border:1px solid #60a5fa}
+        .tc-pill.archive{background:#7c2d12;color:#fdba74;border:1px solid #fb923c}
+
+        /* ── Card name clickable ── */
+        .fc-name{color:var(--text);font-size:12.5px;font-weight:600;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer;transition:color .18s}
+        .fc-name:active{color:var(--accent)}
+
+        /* ── States ── */
+        .state-box{text-align:center;padding:60px 20px;color:var(--muted);grid-column:1/-1;font-weight:500;line-height:1.6}
+        .state-icon{font-size:40px;margin-bottom:12px}
+        .state-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px}
+
+        /* ── Pagination ── */
+        .pagination{display:none;justify-content:center;align-items:center;gap:12px;padding:16px 0 10px}
+        .pg-btn{background:var(--bg4);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s,transform .15s}
+        .pg-btn:disabled{opacity:.35;cursor:not-allowed}
+        .pg-btn:not(:disabled):active{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(.93)}
+        .pg-info{font-size:12px;font-weight:700;color:var(--muted)}
+
+        /* ── Toast ── */
+        .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--accent);color:#fff;padding:10px 22px;border-radius:30px;font-weight:700;font-size:13px;transition:.3s;z-index:1000;white-space:nowrap;box-shadow:0 4px 15px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1)}
+        .toast.show{transform:translateX(-50%) translateY(0)}
+
+        /* ── Player Sheet ── */
+        .player-sheet{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;justify-content:flex-end;pointer-events:none;opacity:0;transition:opacity .25s}
+        .player-sheet.open{pointer-events:all;opacity:1}
+        .sheet-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(4px)}
+        .sheet-body{position:relative;background:#000;border-radius:18px 18px 0 0;width:100%;max-height:90vh;overflow:hidden;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,1,.6,1);display:flex;flex-direction:column}
+        .player-sheet.open .sheet-body{transform:translateY(0)}
+        .sheet-handle{width:36px;height:4px;background:rgba(255,255,255,.25);border-radius:2px;margin:10px auto 6px;flex-shrink:0}
+        .sheet-title{font-size:12px;font-weight:700;color:#ccc;padding:0 14px 8px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;flex-shrink:0}
+        .sheet-close{position:absolute;top:8px;right:12px;background:rgba(255,255,255,.12);border:none;color:#fff;width:28px;height:28px;border-radius:50%;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:10}
+        .sheet-player{width:100%;flex-shrink:0}
+        .sheet-player video{width:100%;display:block}
+        .plyr--video{--plyr-color-main:#e50914;--plyr-video-background:#000}
+        .plyr__control--overlaid,.plyr__control:hover{background:rgba(229,9,20,.9)!important}
+        .sheet-actions{display:flex;gap:10px;padding:12px 14px 20px;flex-shrink:0}
+        .sheet-btn{flex:1;padding:11px 0;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:none;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;transition:opacity .15s}
+        .sheet-btn:active{opacity:.8}
+        .sheet-btn-dl{background:var(--accent);color:#fff}
+        .sheet-btn-copy{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.15)}
+    </style>
+</head>
+<body>
+
+    <div class="topbar">
+        <div class="logo"><span class="nf-icon">F</span> FAST FINDER</div>
+
+    </div>
+
+    <div class="search-zone">
+        <div class="search-row">
+            <div class="search-wrap">
+                <input type="text" id="q" class="search-input" placeholder="Titles, genres, people…" enterkeyhint="search">
+            </div>
+            <button class="search-btn" onclick="doSearch(0)">Search</button>
+        </div>
+        <div class="filters">
+            <div class="cdd-wrap" id="cddColWrap">
+                <div class="cdd-btn" id="cddColBtn" onclick="toggleCdd('col')">
+                    <span id="cddColLabel">📂 All Collections</span>
+                    <span class="cdd-arrow">&#9660;</span>
+                </div>
+                <div class="cdd-menu" id="cddColMenu">
+                    <div class="cdd-item selected" data-val="all" onclick="setColCdd(this)">📂 All Collections<div class="cdd-radio"><div class="cdd-radio-dot"></div></div></div>
+                    <div class="cdd-item" data-val="primary" onclick="setColCdd(this)">🟢 Primary<div class="cdd-radio"><div class="cdd-radio-dot"></div></div></div>
+                    <div class="cdd-item" data-val="cloud" onclick="setColCdd(this)">☁️ Cloud<div class="cdd-radio"><div class="cdd-radio-dot"></div></div></div>
+                    <div class="cdd-item" data-val="archive" onclick="setColCdd(this)">📦 Archive<div class="cdd-radio"><div class="cdd-radio-dot"></div></div></div>
+                </div>
+            </div>
+            <div class="cdd-wrap" id="cddModeWrap">
+                <div class="cdd-btn" id="cddModeBtn" onclick="toggleCdd('mode')">
+                    <span id="cddModeLabel">📸 TG Thumb</span>
+                    <span class="cdd-arrow">&#9660;</span>
+                </div>
+                <div class="cdd-menu" id="cddModeMenu">
+                    <div class="cdd-item selected" data-val="tg" onclick="setModeCdd(this)">📸 TG Thumb<div class="cdd-radio"><div class="cdd-radio-dot"></div></div></div>
+                    <div class="cdd-item" data-val="none" onclick="setModeCdd(this)">⚡ Fast (Text)<div class="cdd-radio"><div class="cdd-radio-dot"></div></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main">
+        <div class="res-grid" id="results">
+            <div class="state-box">
+                <div class="state-icon">🔍</div>
+                <div class="state-title">Search Karo</div>
+                <div>Movie ya series ka naam likhke search karo</div>
+            </div>
+        </div>
+        <div class="pagination" id="pageBox">
+            <button class="pg-btn" id="pBtn" onclick="prev()">◀ Prev</button>
+            <span class="pg-info" id="pgInfo">Page 1</span>
+            <button class="pg-btn" id="nBtn" onclick="next()">Next ▶</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- Player Sheet -->
+    <div class="player-sheet" id="playerSheet">
+        <div class="sheet-backdrop" id="sheetBackdrop"></div>
+        <div class="sheet-body" id="sheetBody">
+            <div class="sheet-handle"></div>
+            <button class="sheet-close" onclick="closePlayer()">✕</button>
+            <div class="sheet-title" id="sheetTitle"></div>
+            <div class="sheet-player" id="sheetPlayer">
+                <video id="sheetVideo" playsinline controls></video>
+            </div>
+            <div class="sheet-actions">
+                <a id="sheetDlBtn" href="#" class="sheet-btn sheet-btn-dl">⬇ Download</a>
+                <button onclick="copyStreamLink()" class="sheet-btn sheet-btn-copy">🔗 Copy Link</button>
+            </div>
+        </div>
+    </div>
+    <div id="sheetToast" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(200px);background:var(--accent);color:#fff;padding:10px 22px;border-radius:30px;font-weight:700;font-size:13px;transition:.3s;z-index:10000;white-space:nowrap;pointer-events:none;opacity:0">Link Copied!</div>
+
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        let curQ = '', curOff = 0, nextOff = '', curCol = 'all', curPage = 1;
+        let pMode = localStorage.getItem('miniapp_pMode') || 'tg';
+        const INIT_DATA = tg.initData || '';
+
+        // sync mode cdd on load
+        if (pMode === 'none') {
+            document.querySelectorAll('#cddModeMenu .cdd-item').forEach(i => i.classList.remove('selected'));
+            let modeItem = document.querySelector('#cddModeMenu [data-val="none"]');
+            if (modeItem) { modeItem.classList.add('selected'); document.getElementById('cddModeLabel').textContent = '⚡ Fast (Text)'; }
+        }
+        if (pMode === 'none') document.getElementById('results').classList.add('mode-none');
+
+
+
+        function toggleCdd(id) {
+            let btn = document.getElementById('cdd' + (id==='col'?'Col':'Mode') + 'Btn');
+            let menu = document.getElementById('cdd' + (id==='col'?'Col':'Mode') + 'Menu');
+            let isOpen = menu.classList.contains('open');
+            document.querySelectorAll('.cdd-menu').forEach(m => m.classList.remove('open'));
+            document.querySelectorAll('.cdd-btn').forEach(b => b.classList.remove('open'));
+            if (!isOpen) {
+                let rect = btn.getBoundingClientRect();
+                menu.style.top = (rect.bottom + 6) + 'px';
+                menu.style.left = rect.left + 'px';
+                menu.classList.add('open');
+                btn.classList.add('open');
+            }
+        }
+
+        function setColCdd(item) {
+            document.querySelectorAll('#cddColMenu .cdd-item').forEach(i => i.classList.remove('selected'));
+            item.classList.add('selected');
+            curCol = item.dataset.val;
+            document.getElementById('cddColLabel').textContent = item.childNodes[0].textContent.trim();
+            document.getElementById('cddColMenu').classList.remove('open');
+            document.getElementById('cddColBtn').classList.remove('open');
+            if (curQ) doSearch(0);
+        }
+
+        function setModeCdd(item) {
+            document.querySelectorAll('#cddModeMenu .cdd-item').forEach(i => i.classList.remove('selected'));
+            item.classList.add('selected');
+            pMode = item.dataset.val;
+            localStorage.setItem('miniapp_pMode', pMode);
+            document.getElementById('cddModeLabel').textContent = item.childNodes[0].textContent.trim();
+            document.getElementById('cddModeMenu').classList.remove('open');
+            document.getElementById('cddModeBtn').classList.remove('open');
+            document.getElementById('results').classList.toggle('mode-none', pMode === 'none');
+            if (curQ) doSearch(curOff);
+        }
+
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.cdd-wrap')) {
+                document.querySelectorAll('.cdd-menu').forEach(m => m.classList.remove('open'));
+                document.querySelectorAll('.cdd-btn').forEach(b => b.classList.remove('open'));
+            }
+        });
+
+        function showToast(msg) {
+            let t = document.getElementById('toast');
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+
+        document.getElementById('q').addEventListener('keydown', e => {
+            if (e.key === 'Enter') doSearch(0);
+        });
+
+        function handleThumbError(fileId) {
+            const box = document.getElementById(`pb-${fileId}`);
+            if (!box) return;
+            box.innerHTML = `
+                <div class="thumb-error">
+                    <span>Thumbnail load nahi hua</span>
+                    <button class="retry-btn" onclick="reloadThumb('${fileId}')">🔄 Retry</button>
+                </div>`;
+        }
+
+        async function reloadThumb(fileId) {
+            const box = document.getElementById(`pb-${fileId}`);
+            if (!box) return;
+            const t = Date.now();
+            box.innerHTML = `<img src="/api/thumb?file_id=${fileId}&t=${t}" class="fc-poster" onerror="handleThumbError('${fileId}')">`;
+        }
+
+        function showError(type, extra = '') {
+            const grid = document.getElementById('results');
+            document.getElementById('pageBox').style.display = 'none';
+            tg.MainButton.hide();
+            let icon = '❌', title = 'Error', msg = extra;
+            if (type === 'auth')  { icon = '🔒'; title = 'Access Denied'; msg = 'Premium required. Use /plan in bot PM.'; }
+            if (type === 'rate')  { icon = '⏳'; title = 'Thoda Ruko!'; msg = 'Search throttled. Wait a moment.'; }
+            if (type === 'init')  { icon = '⚠️'; title = 'Security Error'; msg = 'Only works inside official Telegram app.'; }
+            grid.innerHTML = `<div class="state-box"><div class="state-icon">${icon}</div><div class="state-title">${title}</div><div>${msg}</div></div>`;
+        }
+
+        function htmlEntities(str) {
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        async function doSearch(offset) {
+            let q = document.getElementById('q').value.trim();
+            if (!q) return showToast('Kuch likho pehle!');
+            if (!INIT_DATA) return showError('init');
+
+            curQ = q; curOff = offset;
+            if (offset === 0) curPage = 1;
+
+            document.getElementById('results').innerHTML = '<div class="state-box"><div class="state-icon">⏳</div><div class="state-title">Searching...</div></div>';
+            document.getElementById('pageBox').style.display = 'none';
+
+            tg.MainButton.setText('🔍 Searching...');
+            tg.MainButton.show();
+            tg.MainButton.showProgress();
+
+            try {
+                let res = await fetch(
+                    `/api/search?q=${encodeURIComponent(q)}&offset=${offset}&col=${curCol}&mode=${pMode}`,
+                    { headers: { 'X-Telegram-Init-Data': INIT_DATA } }
+                );
+
+                if (res.status === 403) return showError('auth');
+                if (res.status === 429) return showError('rate');
+                if (!res.ok) return showError('generic', `Error ${res.status}`);
+
+                let d = await res.json();
+                if (d.error) {
+                    if (d.error.includes('Unauthorized')) return showError('auth');
+                    if (d.error.includes('fast')) return showError('rate');
+                    return showError('generic', d.error);
+                }
+
+                if (!d.results || d.results.length === 0) {
+                    tg.MainButton.hide();
+                    document.getElementById('results').innerHTML = `<div class="state-box"><div class="state-icon">🔎</div><div class="state-title">Kuch nahi mila</div><div>"${htmlEntities(q)}" ke liye koi result nahi</div></div>`;
+                    return;
+                }
+
+                let html = '';
+                d.results.forEach(f => {
+                    let sc = (['primary','cloud','archive'].includes((f.source||'').toLowerCase())) ? f.source.toLowerCase() : 'primary';
+
+                    let posterHtml = '';
+                    if (pMode !== 'none') {
+                        posterHtml = `
+                        <div class="poster-box" id="pb-${f.file_id}">
+                            <img src="${f.tg_thumb}" class="fc-poster" loading="lazy" onerror="handleThumbError('${f.file_id}')">
+                            <div class="poster-top">
+                                <span class="type-chip">${htmlEntities(f.type||'VIDEO')}</span>
+                                <span class="size-chip">${htmlEntities(f.size||'')}</span>
+                                <span class="source-pill ${sc}"><span class="source-dot"></span>${sc.toUpperCase()}</span>
+                            </div>
+                        </div>`;
+                    } else {
+                        posterHtml = `
+                        <div class="fc-text-info">
+                            <span class="tc-type">${htmlEntities(f.type||'VIDEO')}</span>
+                            <span class="tc-size">${htmlEntities(f.size||'')}</span>
+                            <span class="tc-pill ${sc}"><span class="source-dot"></span>${sc.toUpperCase()}</span>
+                        </div>`;
+                    }
+
+                    let safeName = htmlEntities(f.name);
+                    html += `
+                    <div class="file-card" onclick="openStream('${f.file_id}','watch','${f.name.replace(/'/g,'\'').replace(/`/g,'\`')}')">
+                        ${posterHtml}
+                        <div class="fc-body">
+                            <div class="fc-name">${safeName}</div>
+                            <div class="fc-meta">${htmlEntities(f.size||'')} • ${htmlEntities(f.type||'')}</div>
+                        </div>
+                    </div>`;
+                });
+
+                document.getElementById('results').innerHTML = html;
+                nextOff = d.next_offset;
+
+                document.getElementById('pageBox').style.display = 'flex';
+                document.getElementById('pBtn').disabled = (offset === 0);
+                document.getElementById('nBtn').disabled = !nextOff;
+                document.getElementById('pgInfo').innerText = 'Page ' + curPage;
+
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            } catch (err) {
+                showError('generic', 'Connection fail. Dobara try karo.');
+            } finally {
+                tg.MainButton.hideProgress();
+                tg.MainButton.hide();
+            }
+        }
+
+        let plyrInstance = null;
+        let currentStreamUrl = '';
+
+        async function openStream(fileId, mode, fileName) {
+            showToast('⏳ Loading...');
+            try {
+                let res = await fetch('/setup_stream', {
+                    method: 'POST',
+                    headers: { 'X-Telegram-Init-Data': INIT_DATA, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ file_id: fileId, mode: 'watch' })
+                });
+                if (res.status === 403) { showToast('🔒 Access denied'); return; }
+                if (!res.ok) { showToast('❌ Server error'); return; }
+                let data = await res.json().catch(() => ({}));
+                if (data.error) { showToast('❌ ' + data.error); return; }
+                // /watch/{id} → /download/{id} for direct binary stream
+                let streamUrl = (data.url || '').replace('/watch/', '/download/');
+                if (!streamUrl) { showToast('❌ Stream URL missing'); return; }
+                openPlayerSheet(window.location.origin + streamUrl, fileName || fileId);
+            } catch(e) {
+                showToast('❌ Connection fail');
+            }
+        }
+
+        function openPlayerSheet(url, title) {
+            currentStreamUrl = url;
+            document.getElementById('sheetTitle').textContent = title;
+            document.getElementById('sheetDlBtn').href = url;
+
+            // destroy old plyr instance
+            if (plyrInstance) { try { plyrInstance.destroy(); } catch(e){} plyrInstance = null; }
+
+            // reset video element
+            let container = document.getElementById('sheetPlayer');
+            container.innerHTML = '<video id="sheetVideo" playsinline controls></video>';
+            let video = document.getElementById('sheetVideo');
+            video.src = url;
+
+            // init plyr
+            plyrInstance = new Plyr('#sheetVideo', {
+                controls: ['play-large','play','progress','current-time','mute','settings','fullscreen'],
+                settings: ['speed'],
+                autoplay: true
+            });
+
+            plyrInstance.on('enterfullscreen', () => {
+                if (screen.orientation && screen.orientation.lock)
+                    screen.orientation.lock('landscape').catch(()=>{});
+            });
+            plyrInstance.on('exitfullscreen', () => {
+                if (screen.orientation && screen.orientation.unlock)
+                    screen.orientation.unlock();
+            });
+
+            document.getElementById('playerSheet').classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closePlayer() {
+            document.getElementById('playerSheet').classList.remove('open');
+            document.body.style.overflow = '';
+            if (plyrInstance) {
+                try { plyrInstance.pause(); plyrInstance.destroy(); } catch(e){}
+                plyrInstance = null;
+            }
+            document.getElementById('sheetPlayer').innerHTML = '<video id="sheetVideo" playsinline controls></video>';
+        }
+
+        document.getElementById('sheetBackdrop').addEventListener('click', function(e) {
+            if (e.target === this) closePlayer();
+        });
+
+        function copyStreamLink() {
+            navigator.clipboard.writeText(currentStreamUrl).catch(() => {});
+            let t = document.getElementById('sheetToast');
+            t.style.opacity = '1';
+            t.style.transform = 'translateX(-50%) translateY(0)';
+            setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(200px)'; }, 2500);
+        }
+
+        function next() { if (nextOff) { curPage++; doSearch(nextOff); } }
+        function prev() { if (curPage > 1) { curPage--; doSearch(Math.max(0, curOff - 21)); } }
+    </script>
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+</body>
+</html>
