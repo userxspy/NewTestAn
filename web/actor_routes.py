@@ -425,14 +425,22 @@ async def api_actor_search_handler(req):
     
     tags_list = actor.get("tags", [])
     
-    # ✅ ABSOLUTE FIX: अब एक्टर का मुख्य नाम पूरी तरह बाईपास (इग्नोर) हो जाएगा।
-    # अगर इनपुट बॉक्स खाली है, तो 'search_query' को एकदम ब्लैंक "" भेजा जाएगा, 
-    # जिससे ia_filterdb का कोर 'get_actor_search_results' इंजन केवल और केवल 'tags_list' (जैसे: Open, Night) को ही सर्च करेगा।
+    # ─────────────────────────────────────────────────────────────────
+    # ✅ FIX: REGEX CRASH & EMPTY-STRING OVERRIDE PIPELINE
+    # ─────────────────────────────────────────────────────────────────
+    # अगर इनपुट बॉक्स खाली है, तो हम पहले टैग को 'search_query' बना देंगे 
+    # और बाकी के टैग्स को 'passing_tags' लिस्ट में भेजेंगे।
+    # इससे ia_filterdb.py के 'all_terms' में कभी खाली स्ट्रिंग नहीं जाएगी 
+    # और रेगुलर एक्सप्रेशन डेटाबेस को वाइल्डकार्ड की तरह ओपन नहीं करेगा!
     if not q_custom:
-        search_query = ""
-        passing_tags = tags_list
+        if tags_list:
+            search_query = tags_list[0]
+            passing_tags = tags_list[1:]
+        else:
+            search_query = "NO_TAGS_FOUND"
+            passing_tags = []
     else:
-        # अगर यूज़र ने सर्च बॉक्स में खुद कुछ टाइप किया है, तो उस टाइप की हुई वैल्यू के साथ-साथ टैग्स को सिंक रखेंगे।
+        # अगर यूज़र ने सर्च बॉक्स में खुद कुछ नया टाइप किया है, तो उसके इनपुट के साथ सारे टैग्स एरे सिंक रहेंगे।
         search_query = q_custom
         passing_tags = tags_list
     
