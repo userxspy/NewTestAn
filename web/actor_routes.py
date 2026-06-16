@@ -38,8 +38,7 @@ async def actors_directory_page(req):
         actors_grid_html = '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:20px;">'
         for act in all_actors:
             act_id = str(act["_id"])
-            # ✅ GRID IMAGE REFRESH OVERRIDE
-            v_salt = int(time.time())
+            v_salt = int(act.get('created_at', time.time()))
             actors_grid_html += f'''
             <div style="background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; transition:0.2s; cursor:pointer;" onclick="window.location.href='/actor/{act_id}'">
                 <div style="position:relative; padding-top:135%; background:var(--bg3); overflow:hidden;">
@@ -135,7 +134,7 @@ async def api_create_actor(req):
         return web.HTTPFound(f'/admin/create_actor?err=Server Error: {str(e)}')
 
 # ─────────────────────────────────────────────────────────
-# 🖼️ ZERO-RAM GENERAL PHOTO ENGINE (CACHE BUSTER UPGRADE)
+# 🖼️ ZERO-RAM GENERAL PHOTO ENGINE
 # ─────────────────────────────────────────────────────────
 @actor_routes.get('/api/actor/photo')
 async def get_actor_photo(req):
@@ -163,7 +162,6 @@ async def get_actor_photo(req):
         file_data.close()
         del file_data
         
-        # ✅ HARD REFRESH FIX: ब्राउज़र कैशे को ब्लॉक करने वाले हेडर इंजेक्ट किए गए
         headers = {
             "Cache-Control": "no-cache, no-store, must-revalidate",
             "Pragma": "no-cache",
@@ -243,8 +241,6 @@ async def actor_profile_display(req):
     
     tags_json_payload = html.escape(json.dumps(tags_list))
     safe_bio = html.escape(actor.get("bio", ""))
-
-    # ✅ MASTER LIVE DYNAMIC TIME STAMP CACHE BUSTER
     cache_salt = int(time.time())
 
     tab_engine_ui = f'''
@@ -277,6 +273,15 @@ async def actor_profile_display(req):
         .upload-overlay.show {{ display: flex !important; }}
         .progress-box {{ width: 80%; max-width: 300px; height: 6px; background: var(--bg4); border-radius: 3px; overflow: hidden; margin-top: 15px; }}
         .progress-bar {{ width: 0%; height: 100%; background: var(--accent); transition: width 0.4s ease; }}
+
+        /* 🛠️ UI UPGRADE: गियर आइकन ताकि क्लिक करने पर एडमिन मेनू और प्ले लिंक आपस में न टकराएं */
+        .card-gear-trigger {{ position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.75); border:1px solid rgba(255,255,255,0.15); color:#fff; width:30px; height:30px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer; z-index:10; transition:0.2s; }}
+        .card-gear-trigger:hover {{ background:var(--accent); }}
+        .poster-admin {{ position:absolute; bottom:0; left:0; right:0; display:flex; gap:4px; padding:6px; background:rgba(0,0,0,0.85); transform:translateY(100%); transition:transform 0.2s ease; z-index:11; }}
+        .gallery-item-wrapper.admin-active .poster-admin, .file-card.admin-active .poster-admin {{ transform:translateY(0); }}
+        .btn-edit-inline, .btn-del-inline {{ flex:1; padding:6px 0; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; border:none; color:#fff; }}
+        .btn-edit-inline {{ background:var(--bg4); border:1px solid var(--border); }}
+        .btn-del-inline {{ background:rgba(160,8,8,0.85); }}
     </style>
 
     <div id="uploadNotificationOverlay" class="upload-overlay">
@@ -518,6 +523,21 @@ async def actor_profile_display(req):
             }} catch(e) {{ alert("Server response error."); }}
         }}
 
+        // ✅ UI INLINE ADMIN CONTROL TOGGLER (नाम और कार्ड को क्लिक से सुरक्षित रखने की तकनीक)
+        function toggleAdminInlineMenu(el, e) {{
+            e.stopPropagation();
+            e.preventDefault();
+            var card = el.closest('.file-card');
+            var isActive = card.classList.contains('admin-active');
+            document.querySelectorAll('.file-card.admin-active').forEach(function(c){{ c.classList.remove('admin-active'); }});
+            if(!isActive) {{ card.classList.add('admin-active'); }}
+        }}
+
+        // पूरे डॉक्युमेंट पर कहीं भी क्लिक होने पर खुला हुआ एडमिन मेनू छिप जाएगा
+        document.addEventListener('click', function() {{
+            document.querySelectorAll('.file-card.admin-active').forEach(function(c){{ c.classList.remove('admin-active'); }});
+        }});
+
         async function triggerActorSearchAjax() {{
             var q = document.getElementById('actor_movie_q').value.trim();
             var col = document.getElementById('actor_col_sel').value;
@@ -540,13 +560,53 @@ async def actor_profile_display(req):
                 d.results.forEach(function(f) {{
                     var sc = (f.source || 'primary').toLowerCase();
                     if(!['primary','cloud','archive'].includes(sc)) sc = 'primary';
+                    
+                    // ✅ COMPONENT REBUILD UPGRADE: पूरे कार्ड को सीधा मुख्य एंकर / वॉच लिंक बना दिया गया है। 
+                    // अब आप इमेज, टेक्स्ट या खाली जगह कहीं भी सिंगल टैप करेंगे, वीडियो 100% प्ले हो जाएगा।
+                    
+                    var adminGearTrigger = '';
+                    var adminInlineRow = '';
+                    
+                    if(d.is_admin) {{
+                        // एडमिन के लिए अलग गियर आइकन जो प्ले इवेंट को डिस्टर्ब किए बिना एडिट स्लाइडर ओपन करेगा
+                        adminGearTrigger = '<div class="card-gear-trigger" onclick="toggleAdminInlineMenu(this, event)">⚙️</div>';
+                        
+                        var safeName = f.name.replace(/\\\\/g,'\\\\\\\\').replace(/'/g,"\\\\'");
+                        adminInlineRow = '<div class="poster-admin" onclick="event.stopPropagation(); event.preventDefault();">' +
+                            '<button class="btn-edit-inline" onclick="openCombinedEditModalDirect(\\''+f.file_id+'\\',\\''+f.raw_collection+'\\',\\''+safeName+'\\')">&#9999; Edit</button>' +
+                            '<button class="btn-del-inline" onclick="deleteFileDirect(\\''+f.file_id+'\\',\\''+f.raw_collection+'\\')">&#128465; Del</button>' +
+                        '</div>';
+                    }}
+
                     var posterHtml = '';
                     if(mode !== 'none') {{
-                        posterHtml = '<div class="poster-box"><img src="'+f.tg_thumb+'" class="fc-poster" onload="this.classList.add(\\'loaded\\')" loading="lazy"><div class="poster-top"><span class="type-chip">'+f.type.toUpperCase()+'</span><span class="size-chip">'+f.size+'</span><span class="source-pill '+sc+'"><span class="source-dot"></span>'+sc.toUpperCase()+'</span></div></div>';
+                        posterHtml = '<div class="poster-box" id="poster-box-'+f.file_id+'">' +
+                            '<img src="'+f.tg_thumb+'" class="fc-poster" onload="this.classList.add(\\'loaded\\')" loading="lazy">' +
+                            '<div class="poster-top">' +
+                                '<span class="type-chip">'+f.type.toUpperCase()+'</span>' +
+                                '<span class="size-chip">'+f.size+'</span>' +
+                                '<span class="source-pill '+sc+'"><span class="source-dot"></span>'+sc.toUpperCase()+'</span>' +
+                            '</div>' +
+                            adminGearTrigger +
+                            adminInlineRow +
+                        '</div>';
                     }} else {{
-                        posterHtml = '<div class="fc-text-info"><span class="tc-type">'+f.type.toUpperCase()+'</span><span class="tc-size">'+f.size+'</span><span class="source-pill '+sc+'" style="margin-left:auto"><span class="source-dot"></span>'+sc.toUpperCase()+'</span></div>';
+                        // टेक्स्ट मोड में भी सेपरेट गियर ट्रिगर
+                        posterHtml = '<div class="fc-text-info">' +
+                            '<span class="tc-type">'+f.type.toUpperCase()+'</span>' +
+                            '<span class="tc-size">'+f.size+'</span>' +
+                            '<span class="source-pill '+sc+'" style="margin-left:auto"><span class="source-dot"></span>'+sc.toUpperCase()+'</span>' +
+                            (d.is_admin ? '<span style="margin-left:8px; cursor:pointer;" onclick="toggleAdminInlineMenu(this, event)">⚙️</span>' : '') +
+                            adminInlineRow +
+                        '</div>';
                     }}
-                    h += '<div class="file-card">' + posterHtml + '<div class="fc-body"><div class="fc-name" onclick="window.open(\\'\\'+f.watch+\\'\\',\\'_blank\\')">'+f.name+'</div></div></div>';
+                    
+                    h += '<div class="file-card" onclick="window.open(\\''+f.watch+'\\',\\'_blank\\')">' + 
+                        posterHtml + 
+                        '<div class="fc-body">' +
+                            '<div class="fc-name" id="name-title-'+f.file_id+'">'+f.name+'</div>' +
+                        '</div>' + 
+                    '</div>';
                 }});
                 grid.innerHTML = h;
                 actNextOffset = d.next_offset;
@@ -558,6 +618,10 @@ async def actor_profile_display(req):
                 grid.innerHTML = '<div class="empty"><p>Matrix pipeline sync timeout error.</p></div>';
             }}
         }}
+
+        // मुख्य डैशबोर्ड मॉड्यूल्स के साथ सिंकिंग के लिए डायरेक्ट रैपर्स
+        function openCombinedEditModalDirect(fid, col, name) {{ if(typeof editFile === 'function') {{ editFile(fid, col, name); }} else {{ alert("Edit modal layout missing in master asset."); }} }}
+        function deleteFileDirect(fid, col) {{ if(typeof deleteFile === 'function') {{ deleteFile(fid, col); }} else {{ alert("Delete connection handler missing."); }} }}
 
         function actorPageNext() {{ if(actNextOffset) {{ actCurPage++; actOffset = actNextOffset; triggerActorSearchAjax(); window.scrollTo(0,350); }} }}
         function actorPagePrev() {{ if(actCurPage > 1) {{ actCurPage--; actOffset = Math.max(0, actOffset - actLimit); triggerActorSearchAjax(); window.scrollTo(0,350); }} }}
@@ -618,11 +682,12 @@ async def api_actor_search_handler(req):
             "size": get_size(d.get("file_size", 0)),
             "type": d.get("file_type", "document").upper(),
             "source": source_col.lower(),
+            "raw_collection": source_col.lower(),  # एडमिन एडिट सिंकिंग के लिए आवश्यक पैकेट
             "tg_thumb": tg_thumb,
             "watch": f"/setup_stream?file_id={fid}&mode=watch"
         })
         
-    return web.json_response({"results": results_list, "next_offset": next_offset})
+    return web.json_response({"results": results_list, "next_offset": next_offset, "is_admin": role == "admin"})
 
 # ─────────────────────────────────────────────────────────
 # ⚙️ ADMIN API: UPDATE PROFILE DETAILS & SOCIAL MEDIA CHANNELS
@@ -663,7 +728,6 @@ async def api_actor_update_profile(req):
             "social_links": {"instagram": insta, "youtube": yt, "twitter": twitter, "other": other}
         }
         
-        # ✅ PROFILE PHOTO UPDATE TRIGGER: नई प्रोफाइल फोटो अपलोड को प्रोसेस करें
         if change_photo_bytes and len(change_photo_bytes) > 10:
             with io.BytesIO(change_photo_bytes) as img_buffer:
                 img_buffer.name = f"avatar_{actor_id}.jpg"
@@ -671,6 +735,7 @@ async def api_actor_update_profile(req):
             if msg and msg.photo:
                 tg_photo_id = msg.photo.sizes[-1].file_id if hasattr(msg.photo, "sizes") and msg.photo.sizes else msg.photo.file_id
                 update_doc["photo_url"] = f"TG_ID:{tg_photo_id}"
+                update_doc["created_at"] = time.time()
 
         await actors.update_one({"_id": ObjectId(actor_id)}, {"$set": update_doc})
         return web.json_response({"success": True})
