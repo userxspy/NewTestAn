@@ -19,7 +19,8 @@ async def actors_directory_page(req):
     h = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:20px;">'
     for act in all_actors:
         aid = str(act["_id"])
-        h += f'<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;" onclick="location.href=\'/actor/{aid}\'"><div style="position:relative;padding-top:135%;background:var(--bg3);"><img src="/api/actor/photo?id={aid}&t={int(act.get("created_at",0))}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></div><div style="padding:12px;text-align:center;font-size:14px;font-weight:700;color:var(--text);text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">{html.escape(act.get("name",""))}</div></div>'
+        ts = int(act.get("created_at") or time.time())
+        h += f'<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;" onclick="location.href=\'/actor/{aid}\'"><div style="position:relative;padding-top:135%;background:var(--bg3);"><img src="/api/actor/photo?id={aid}&t={ts}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></div><div style="padding:12px;text-align:center;font-size:14px;font-weight:700;color:var(--text);text-overflow:ellipsis;overflow:hidden;white-space:nowrap;">{html.escape(act.get("name",""))}</div></div>'
     h += '</div>' if all_actors else '<div style="color:var(--muted);text-align:center;padding:60px 20px;">🎭 No star profiles created yet.</div>'
 
     body = f'<div class="main" style="padding-top:30px;max-width:1100px;margin:0 auto;padding-left:20px;padding-right:20px;"><div style="margin-bottom:20px;"><h1 style="font-size:28px;font-weight:900;color:var(--text);margin-bottom:4px;">🎭 Actors Catalog</h1><p style="color:var(--muted);font-size:14px;">Browse star profiles and content grids.</p></div>{admin_btn}{h}</div>'
@@ -69,9 +70,10 @@ async def actor_profile_display(req):
     social = act.get("social_links", {})
     gallery_list = act.get("gallery", [])
     t_payload = html.escape(json.dumps(act.get("tags", [])))
+    ts = int(act.get("created_at") or time.time())
     
     chips = "".join([f'<span style="background:var(--bg3);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 8px;border-radius:4px;font-weight:600;">#{html.escape(t)}</span>' for t in act.get("tags",[])])
-    soc_html = "".join([f'<a href="{html.escape(social[k])}" target="_blank" style="background:{"#ff007f" if k=="instagram" else "#ff0000" if k=="youtube" else "#1da1f2"};color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:700;">{"📸 Instagram" if k=="instagram" else "📺 YouTube" if k=="youtube" else "🐦 Twitter"}</a>' for k in ["instagram","youtube","twitter"] if social.get(k)])
+    soc_html = "".join([f'<a href="{html.escape(social[k])}" target="_blank" style="background:{"#ff007f" if k=="instagram" else "#ff0000" if k=="youtube" else "#1da1f2"};color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:700;margin-items:center;">{"📸 Instagram" if k=="instagram" else "📺 YouTube" if k=="youtube" else "🐦 Twitter"}</a>' for k in ["instagram","youtube","twitter"] if social.get(k)])
     
     gal_html = f'<div style="background:var(--card);border:1px dashed var(--border);padding:20px;border-radius:8px;text-align:center;margin-bottom:20px;"><form action="/api/actor/gallery_upload" method="post" enctype="multipart/form-data"><input type="hidden" name="actor_id" value="{aid}"><label style="background:var(--accent);color:#fff;padding:10px 20px;border-radius:6px;font-weight:700;cursor:pointer;font-size:13px;display:inline-block;">📂 Add Image to Gallery<input type="file" name="gallery_img" accept="image/*" style="display:none;" onchange="this.form.submit()"></label></form></div>' if role=='admin' else ""
     if gallery_list:
@@ -84,8 +86,7 @@ async def actor_profile_display(req):
 
     adm_act = f'<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;"><button onclick="openActorEditModal()" style="background:var(--bg4);border:1px solid var(--border);color:var(--text);padding:8px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✏️ Edit Profile</button><button onclick="deleteActorProfile(\'{aid}\')" style="background:rgba(160,8,8,.78);border:1px solid rgba(229,9,20,.45);color:#fff;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">🗑️ Delete Profile</button><label style="background:var(--bg3);border:1px dashed var(--border);color:var(--text);padding:7px 14px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">📸 Change Avatar<input type="file" id="avatarUpdateInput" accept="image/*" style="display:none;" onchange="updateActorAvatar(\'{aid}\')"></label></div>' if role=='admin' else ""
 
-    # ✅ 100% DASHBOARD GLASS DESIGN SYSTEM
-    ui = f'''
+    tab_engine_ui = f'''
     <style>
         .actor-tab-bar {{ display:flex;gap:10px;border-bottom:2px solid var(--border);margin-bottom:25px; }}
         .actor-tab {{ background:transparent;border:none;color:var(--muted);padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;position:relative;font-family:inherit; }}
@@ -98,10 +99,13 @@ async def actor_profile_display(req):
         @media(min-width:600px) {{ .gallery-grid {{ grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); }} }}
         .gallery-item-wrap {{ position:relative;border-radius:8px;overflow:hidden;border:1px solid var(--border);aspect-ratio:1;cursor:pointer; }}
         .gallery-item {{ width:100%;height:100%;object-fit:cover; }}
-        .gallery-del-btn {{ position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:rgba(160,8,8,.9);border:1px solid var(--accent);color:#fff;padding:4px 10px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer;z-index:5; }}
+        
+        /* ✅ डिलीट बटन को हमेशा विज़िबल और रिस्पॉन्सिव लुक में लाया गया */
+        .gallery-del-btn {{ position:absolute;bottom:6px;left:50%;transform:translateX(-50%);background:rgba(160,8,8,.92);border:1.5px solid var(--accent);color:#fff;padding:4px 12px;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer;z-index:5;box-shadow:0 4px 10px rgba(0,0,0,0.5); }}
+        .gallery-del-btn:hover {{ background:var(--accent); }}
         
         .lightbox {{ position:fixed;inset:0;background:rgba(0,0,0,.92);backdrop-filter:blur(15px);z-index:99999;display:none;align-items:center;justify-content:center;opacity:0;transition:opacity .2s; }}
-        .lightbox.open {{ display:flex;opacity:1; }}
+        .lightbox.open {{ display:flex; opacity:1; }}
         .lightbox-img {{ max-width:92%;max-height:88vh;object-fit:contain;border-radius:6px; }}
         .lightbox-close {{ position:absolute;top:20px;right:25px;background:none;border:none;color:#fff;font-size:32px;cursor:pointer; }}
 
@@ -148,7 +152,7 @@ async def actor_profile_display(req):
         <div style="margin-bottom:15px;"><a href="/actors" style="color:var(--muted);text-decoration:none;font-size:14px;font-weight:700;">← Back to Catalog</a></div>
         <div style="display:flex;gap:25px;background:var(--card);border:1px solid var(--border);padding:25px;border-radius:12px;margin-bottom:35px;flex-wrap:wrap;">
             <div style="width:160px;height:220px;background:var(--bg3);border-radius:8px;overflow:hidden;border:1px solid var(--border);flex-shrink:0;">
-                <img id="actorMasterAvatarImage" src="/api/actor/photo?id={aid}&t={int(act.get("created_at",0))}" style="width:100%;height:100%;object-fit:cover;">
+                <img id="actorMasterAvatarImage" src="/api/actor/photo?id={aid}&t={ts}" style="width:100%;height:100%;object-fit:cover;">
             </div>
             <div style="flex:1;min-width:300px;display:flex;flex-direction:column;justify-content:center;">
                 <h1 style="font-size:32px;font-weight:900;color:var(--text);margin-bottom:2px;">{html.escape(actor_name)}</h1>
