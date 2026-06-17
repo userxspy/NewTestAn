@@ -152,7 +152,6 @@ async def get_actor_photo(req):
             headers = {"Cache-Control": "public, max-age=31536000, immutable", "Content-Disposition": 'inline; filename="photo.jpg"'}
         else:
             raw_url = doc.get("photo_url")
-            # ✅ अवतार को बिना ब्राउज़र कैशे के तुरंत रेंडर करने के लिए headers सेट किये गए हैं
             headers = {
                 "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
                 "Pragma": "no-cache",
@@ -301,8 +300,9 @@ async def actor_profile_display(req):
         .cdd-radio-dot-actor {{ width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: none; }}
         .cdd-item-actor.selected .cdd-radio-dot-actor {{ display: block; }}
 
-        .res-grid {{ display: grid; grid-template-columns: 1fr; gap: 4px; margin-bottom: 24px; }}
-        @media(min-width:600px){{ .res-grid {{ grid-template-columns: repeat(3, 1fr); gap: 14px; }} }}
+        /* ✅ FIX: मोबाइल में 1 कॉलम और PC में 3 कॉलम ग्रिड व्यवस्था */
+        .res-grid {{ display: grid; grid-template-columns: 1fr; gap: 16px; margin-bottom: 24px; }}
+        @media(min-width:768px){{ .res-grid {{ grid-template-columns: repeat(3, 1fr); gap: 16px; }} }}
         .file-card {{ background: var(--card); border-radius: 6px; overflow: hidden; border: 1px solid var(--border); transition: transform .22s cubic-bezier(.4,0,.2,1),box-shadow .22s; cursor: pointer; }}
         .file-card:hover {{ transform: translateY(-4px); border-color: rgba(229,9,20,.4); box-shadow: 0 14px 36px rgba(0,0,0,.6); }}
         .poster-box {{ position: relative; padding-top: 56.25%; background: var(--bg3); overflow: hidden; }}
@@ -332,13 +332,21 @@ async def actor_profile_display(req):
         .spinner {{ width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }}
         @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
         .empty {{ text-align: center; padding: 60px 20px; color: var(--muted); grid-column: 1/-1; }}
+
+        /* ✅ FIX: एक्टर मास्टर फोटो साइज को रिस्पॉन्सिवली बढ़ाना */
+        .actor-header-wrap {{ display: flex; gap: 25px; background: var(--card); border: 1px solid var(--border); padding: 25px; border-radius: 12px; margin-bottom: 35px; flex-direction: column; align-items: center; }}
+        .avatar-box-master {{ width: 240px; height: 320px; background: var(--bg3); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); flex-shrink: 0; }}
+        @media(min-width:768px){{
+          .actor-header-wrap {{ flex-direction: row; align-items: stretch; }}
+          .avatar-box-master {{ width: 220px; height: 300px; }}
+        }}
     </style>
 
     <div class="main" style="padding-top:30px; max-width:1100px; margin: 0 auto; padding-left:20px; padding-right:20px;">
         <div style="margin-bottom:15px;"><a href="/actors" style="color:var(--muted); text-decoration:none; font-size:14px; font-weight:700;">← Back to Catalog</a></div>
         
-        <div style="display:flex; gap:25px; background:var(--card); border:1px solid var(--border); padding:25px; border-radius:12px; margin-bottom:35px; flex-wrap:wrap;">
-            <div style="width:160px; height:220px; background:var(--bg3); border-radius:8px; overflow:hidden; border:1px solid var(--border); flex-shrink:0;">
+        <div class="actor-header-wrap">
+            <div class="avatar-box-master">
                 <img id="actorMasterAvatarImage" src="/api/actor/photo?id={actor_id}&t={master_ts}" style="width:100%; height:100%; object-fit:cover;">
             </div>
             <div style="flex:1; min-width:300px; display:flex; flex-direction:column; justify-content:center;">
@@ -664,7 +672,6 @@ async def api_actor_search_handler(req):
     
     tags_list = actor.get("tags", [])
     
-    # ── नया सर्च लॉजिक इंजन ──
     if q_custom:
         search_query = q_custom
         final_tags = []
@@ -673,7 +680,6 @@ async def api_actor_search_handler(req):
             search_query = tags_list[0]
             final_tags = tags_list
         else:
-            # अगर सर्च बार भी खाली है और एक्टर के पास कोई टैग भी नहीं है, तो कोई वीडियो शो नहीं होगा
             return web.json_response({"results": [], "next_offset": ""})
         
     lim = 21
