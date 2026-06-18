@@ -1,4 +1,4 @@
-import io, gc, time, json, html
+import io, gc, time, json, html, re
 from aiohttp import web
 from bson.objectid import ObjectId
 from utils import temp, get_size
@@ -21,51 +21,62 @@ async def actors_directory_page(req):
     has_next_init = len(all_actors) > 20
     all_actors = all_actors[:20]
     
-    admin_btn = f'''<div style="margin-bottom:20px; display:flex; justify-content:flex-end;"><a href="/admin/create_actor" style="background:var(--accent); color:#fff; padding:10px 20px; border-radius:8px; font-weight:700; text-decoration:none; font-size:14px; box-shadow:0 4px 15px rgba(229,9,20,0.3);">➕ Create New Profile</a></div>''' if role == 'admin' else ""
+    admin_btn = '''<button onclick="window.location.href='/admin/create_actor'" style="background:var(--accent); color:#fff; border:none; padding:10px 15px; border-radius:8px; font-weight:800; cursor:pointer; font-size:13px; flex:1; min-width:130px; box-shadow:0 4px 15px rgba(229,9,20,0.3); transition:0.2s;">➕ Create Profile</button>''' if role == 'admin' else ""
     
-    # Premium UI for Search & Filter
-    search_ui = '''
+    # Premium UI for Search & Custom Dropdown Filters
+    search_ui = f'''
     <style>
-        .dir-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-        @media(min-width: 768px) { .dir-grid { grid-template-columns: repeat(5, 1fr); gap: 20px; } }
+        .dir-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }}
+        @media(min-width: 768px) {{ .dir-grid {{ grid-template-columns: repeat(5, 1fr); gap: 20px; }} }}
         
-        .search-box { background:var(--card); border:1px solid var(--border); padding:16px; border-radius:12px; margin-bottom:25px; box-shadow:0 4px 15px rgba(0,0,0,0.1); }
-        .s-row-1 { display: flex; gap: 10px; margin-bottom: 12px; }
-        .s-input { flex: 1; background:var(--bg3); border:1px solid var(--border); padding:12px 16px; color:var(--text); border-radius:8px; outline:none; font-family:inherit; font-weight:600; font-size:14px; transition:0.2s; }
-        .s-input:focus { border-color:var(--accent); }
-        .s-btn { background:var(--accent); color:#fff; border:none; padding:0 24px; border-radius:8px; font-weight:800; cursor:pointer; transition:0.2s; white-space:nowrap; }
-        .s-btn:hover { background:var(--accent-hover); transform:scale(1.02); }
+        .search-box {{ background:var(--card); border:1px solid var(--border); padding:16px; border-radius:12px; margin-bottom:25px; box-shadow:0 4px 15px rgba(0,0,0,0.1); }}
+        .s-row-1 {{ display: flex; gap: 10px; margin-bottom: 12px; }}
+        .s-input {{ flex: 1; background:var(--bg3); border:1px solid var(--border); padding:12px 16px; color:var(--text); border-radius:8px; outline:none; font-family:inherit; font-weight:600; font-size:14px; transition:0.2s; }}
+        .s-input:focus {{ border-color:var(--accent); }}
+        .s-btn {{ background:var(--accent); color:#fff; border:none; padding:0 24px; border-radius:8px; font-weight:800; cursor:pointer; transition:0.2s; white-space:nowrap; }}
+        .s-btn:hover {{ background:var(--accent-hover); transform:scale(1.02); }}
         
-        .s-row-2 { display: flex; gap: 10px; flex-wrap:wrap; }
-        .s-select { flex: 1; min-width:140px; background:var(--bg3); border:1px solid var(--border); padding:10px 14px; color:var(--text); border-radius:8px; outline:none; font-weight:700; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23999%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E"); background-repeat:no-repeat; background-position:right 12px top 50%; background-size:10px auto; font-size:13px; transition:0.2s; }
-        .s-select:focus { border-color:var(--accent); }
+        .s-row-2 {{ display: flex; gap: 10px; flex-wrap:wrap; align-items:center; }}
+        .cdd-wrap {{ position: relative; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; cursor: pointer; font-weight: 700; font-size: 13px; color: var(--text); flex: 1; min-width: 100px; display: flex; justify-content: space-between; align-items: center; user-select: none; transition:0.2s; }}
+        .cdd-wrap:hover {{ border-color: var(--accent); }}
+        .cdd-menu {{ position: absolute; top: calc(100% + 5px); left: 0; right: 0; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; z-index: 100; display: none; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }}
+        .cdd-item {{ padding: 10px 14px; border-bottom: 1px solid var(--border); transition: 0.2s; }}
+        .cdd-item:last-child {{ border-bottom: none; }}
+        .cdd-item:hover {{ background: var(--bg3); color: var(--accent); }}
         
-        .pg-bar { display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; }
-        .pg-btn { background:var(--bg4); color:var(--text); border:1px solid var(--border); padding:8px 20px; border-radius:6px; font-weight:700; cursor:pointer; font-size:13px; transition:0.2s; }
-        .pg-btn:hover:not(:disabled) { background:var(--accent); color:#fff; border-color:var(--accent); }
-        .pg-btn:disabled { opacity:0.4; cursor:not-allowed; }
-        .pg-info { color:var(--text); font-weight:800; font-size:14px; background:var(--bg3); padding:6px 14px; border-radius:6px; border:1px solid var(--border); }
+        .pg-bar {{ display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; }}
+        .pg-btn {{ background:var(--bg4); color:var(--text); border:1px solid var(--border); padding:8px 20px; border-radius:6px; font-weight:700; cursor:pointer; font-size:13px; transition:0.2s; }}
+        .pg-btn:hover:not(:disabled) {{ background:var(--accent); color:#fff; border-color:var(--accent); }}
+        .pg-btn:disabled {{ opacity:0.4; cursor:not-allowed; }}
+        .pg-info {{ color:var(--text); font-weight:800; font-size:14px; background:var(--bg3); padding:6px 14px; border-radius:6px; border:1px solid var(--border); }}
         
-        .act-card { background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; transition:0.2s; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.2); }
-        .act-card:hover { transform:translateY(-4px); border-color:rgba(229,9,20,0.5); }
+        .act-card {{ background:var(--card); border:1px solid var(--border); border-radius:10px; overflow:hidden; transition:transform 0.2s, border-color 0.2s; cursor:pointer; box-shadow:0 4px 10px rgba(0,0,0,0.2); }}
+        .act-card:hover {{ transform:translateY(-4px); border-color:rgba(229,9,20,0.5); }}
     </style>
 
     <div class="search-box">
         <div class="s-row-1">
-            <input type="text" id="dir_q" class="s-input" placeholder="Search Actors, Apps, Websites...">
+            <input type="text" id="dir_q" class="s-input" placeholder="Search...">
             <button class="s-btn" onclick="resetDir(); searchDirectory()">Search</button>
         </div>
         <div class="s-row-2">
-            <select id="dir_cat" class="s-select" onchange="resetDir(); searchDirectory()">
-                <option value="all">📂 All Categories</option>
-                <option value="actor">🎭 Actors Only</option>
-                <option value="app">📱 Apps Only</option>
-                <option value="website">🌐 Websites Only</option>
-            </select>
-            <select id="dir_mode" class="s-select" onchange="resetDir(); searchDirectory()">
-                <option value="poster">🖼️ Poster Mode</option>
-                <option value="text">📄 Text Mode</option>
-            </select>
+            <div class="cdd-wrap" onclick="toggleDirCDD('cat', event)">
+                <span id="dir_cat_lbl">📂 All</span> <span style="font-size:10px; color:var(--muted);">▼</span>
+                <div class="cdd-menu" id="dir_cat_menu">
+                    <div class="cdd-item" onclick="pickDirCat('all', '📂 All', event)">📂 All</div>
+                    <div class="cdd-item" onclick="pickDirCat('actor', '🎭 Actor', event)">🎭 Actor</div>
+                    <div class="cdd-item" onclick="pickDirCat('app', '📱 App', event)">📱 App</div>
+                    <div class="cdd-item" onclick="pickDirCat('website', '🌐 Website', event)">🌐 Website</div>
+                </div>
+            </div>
+            <div class="cdd-wrap" onclick="toggleDirCDD('mode', event)">
+                <span id="dir_mode_lbl">🖼️ Poster</span> <span style="font-size:10px; color:var(--muted);">▼</span>
+                <div class="cdd-menu" id="dir_mode_menu">
+                    <div class="cdd-item" onclick="pickDirMode('poster', '🖼️ Poster', event)">🖼️ Poster</div>
+                    <div class="cdd-item" onclick="pickDirMode('text', '📄 Text', event)">📄 Text</div>
+                </div>
+            </div>
+            {admin_btn}
         </div>
     </div>
     '''
@@ -90,29 +101,43 @@ async def actors_directory_page(req):
     <script>
     var dirOffset = 0; var dirLimit = 20; var dirPage = 1;
     var hasNext = {has_nxt_str};
+    var currentCat = 'all'; var currentMode = 'poster';
     
     document.addEventListener("DOMContentLoaded", () => {{ updatePgUI(); }});
 
+    function closeAllDirCDD() {{ document.getElementById('dir_cat_menu').style.display='none'; document.getElementById('dir_mode_menu').style.display='none'; }}
+    document.addEventListener('click', closeAllDirCDD);
+
+    function toggleDirCDD(type, e) {{
+        e.stopPropagation();
+        var menu = document.getElementById('dir_' + type + '_menu');
+        var isVis = menu.style.display === 'block';
+        closeAllDirCDD();
+        if (!isVis) menu.style.display = 'block';
+    }}
+
+    function pickDirCat(val, lbl, e) {{ e.stopPropagation(); currentCat = val; document.getElementById('dir_cat_lbl').innerText = lbl; closeAllDirCDD(); resetDir(); searchDirectory(); }}
+    function pickDirMode(val, lbl, e) {{ e.stopPropagation(); currentMode = val; document.getElementById('dir_mode_lbl').innerText = lbl; closeAllDirCDD(); resetDir(); searchDirectory(); }}
+
     async function searchDirectory() {{
         var q = document.getElementById('dir_q').value.trim();
-        var cat = document.getElementById('dir_cat').value;
-        var mode = document.getElementById('dir_mode').value;
         var grid = document.getElementById('dir_grid_container');
         
         grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:40px; color:var(--muted); font-weight:700;">🔄 Filtering Directory...</div>';
         try {{
-            var res = await fetch('/api/directory/search?q=' + encodeURIComponent(q) + '&cat=' + cat + '&mode=' + mode + '&offset=' + dirOffset);
+            var res = await fetch('/api/directory/search?q=' + encodeURIComponent(q) + '&cat=' + currentCat + '&mode=' + currentMode + '&offset=' + dirOffset);
+            if (!res.ok) throw new Error("HTTP " + res.status);
             var data = await res.json();
             grid.innerHTML = data.html;
             hasNext = data.has_next;
             
-            if(mode === 'text') {{
+            if(currentMode === 'text') {{
                 grid.style.display = 'flex'; grid.style.flexDirection = 'column'; grid.style.gap = '10px';
             }} else {{
                 grid.style.display = 'grid'; grid.style.gap = '';
             }}
             updatePgUI();
-        }} catch(e) {{ grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:red; font-weight:bold;">Search Error!</div>'; }}
+        }} catch(e) {{ grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; color:var(--accent); font-weight:bold;">Search Error!</div>'; }}
     }}
     
     function updatePgUI() {{
@@ -130,7 +155,7 @@ async def actors_directory_page(req):
     </script>
     '''
 
-    page_body = f'''<div class="main" style="padding-top:30px; max-width:1100px; margin:0 auto; padding-left:20px; padding-right:20px;"><div style="margin-bottom:20px;"><h1 style="font-size:28px; font-weight:900; color:var(--text); margin-bottom:4px;">🗂️ Universal Directory</h1><p style="color:var(--muted); font-size:14px;">Browse and search verified Actors, Apps, and Website profiles.</p></div>{admin_btn}{search_ui}{initial_grid}{js_logic}</div>'''
+    page_body = f'''<div class="main" style="padding-top:20px; max-width:1100px; margin:0 auto; padding-left:20px; padding-right:20px;">{search_ui}{initial_grid}{js_logic}</div>'''
     return build_page("Directory Catalog - Fast Finder", page_body, "", "actors", role)
 
 # ─────────────────────────────────────────────────────────
@@ -144,14 +169,21 @@ async def api_directory_search(req):
     q = req.query.get("q", "").strip()
     cat = req.query.get("cat", "all")
     mode = req.query.get("mode", "poster")
-    offset = int(req.query.get("offset", 0))
+    try: offset = int(req.query.get("offset", 0))
+    except: offset = 0
     lim = 20
     
     query = {}
     if cat != "all": query["category"] = cat
-    if q: query["$or"] = [{"name": {"$regex": q, "$options": "i"}}, {"tags": {"$regex": q, "$options": "i"}}]
+    if q: 
+        # ✅ FIX: RegEx Escape - अब खाली सर्च या स्पेशल सिंबल से सर्वर क्रैश नहीं होगा
+        safe_q = re.escape(q)
+        query["$or"] = [{"name": {"$regex": safe_q, "$options": "i"}}, {"tags": {"$regex": safe_q, "$options": "i"}}]
         
-    docs = await actors.find(query).sort("created_at", -1).skip(offset).limit(lim + 1).to_list(length=lim + 1)
+    try:
+        docs = await actors.find(query).sort("created_at", -1).skip(offset).limit(lim + 1).to_list(length=lim + 1)
+    except Exception as e:
+        docs = []
     
     has_next = len(docs) > lim
     docs = docs[:lim]
