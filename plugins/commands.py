@@ -8,7 +8,8 @@ from hydrogram import Client, filters, enums
 from hydrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 from Script import script
-from database.ia_filterdb import db_count_documents, get_file_details, delete_files
+# ✅ FIX: actors कलेक्शन को इम्पोर्ट किया गया ताकि हम डायरेक्टरी की गिनती कर सकें
+from database.ia_filterdb import db_count_documents, get_file_details, delete_files, actors
 from database.users_chats_db import db
 
 from info import (
@@ -158,6 +159,15 @@ async def stats(_, message):
         db.premium.count_documents({"status.premium": True})
     )
     
+    # ✅ FIX: Universal Directory Stats Calculation
+    try:
+        tot_dir = await actors.count_documents({})
+        app_dir = await actors.count_documents({"category": "app"})
+        web_dir = await actors.count_documents({"category": "website"})
+        act_dir = tot_dir - app_dir - web_dir
+    except:
+        tot_dir = app_dir = web_dir = act_dir = 0
+    
     stats_text = script.STATUS_TXT.format(
         users, chats, premium,
         files['total'],
@@ -167,6 +177,9 @@ async def stats(_, message):
         files['total_thumb'],
         get_readable_time(time_now() - temp.START_TIME)
     )
+    
+    # ✅ FIX: Appending Directory Stats to main text
+    stats_text += f"\n\n🗂️ **Universal Directory:**\n├ 🎭 Actors: {act_dir}\n├ 📱 Apps: {app_dir}\n├ 🌐 Websites: {web_dir}\n└ 📊 Total Profiles: {tot_dir}"
     
     buttons = [
         [InlineKeyboardButton("🔄 WARMUP THUMBNAILS", callback_data="warmup_trigger_all")],
@@ -290,6 +303,17 @@ async def ui_cb(client, query):
         files = await db_count_documents()
         uptime = get_readable_time(time_now() - temp.START_TIME)
 
+        # ✅ FIX: Fetch Universal Directory Stats
+        try:
+            tot_dir = await actors.count_documents({})
+            app_dir = await actors.count_documents({"category": "app"})
+            web_dir = await actors.count_documents({"category": "website"})
+            act_dir = tot_dir - app_dir - web_dir
+        except:
+            tot_dir = app_dir = web_dir = act_dir = 0
+
+        dir_stats_text = f"\n\n🗂️ **Universal Directory:**\n├ 🎭 Actors: {act_dir}\n├ 📱 Apps: {app_dir}\n├ 🌐 Websites: {web_dir}\n└ 📊 Total Profiles: {tot_dir}"
+
         if query.from_user.id in ADMINS:
             users, chats, premium = await asyncio.gather(
                 db.total_users_count(),
@@ -304,6 +328,7 @@ async def ui_cb(client, query):
                 files['archive'], files['archive_thumb'],
                 files['total_thumb'], uptime
             )
+            text += dir_stats_text
             btn = [
                 [InlineKeyboardButton("🔄 WARMUP THUMBNAILS", callback_data="warmup_trigger_all")],
                 [InlineKeyboardButton("⬅️ Back Menu", callback_data="back_start")]
@@ -312,6 +337,7 @@ async def ui_cb(client, query):
             text = script.USER_STATUS_TXT.format(
                 files['total'], files['primary'], files['cloud'], files['archive'], uptime
             )
+            text += dir_stats_text
             btn = [[InlineKeyboardButton("⬅️ Back Menu", callback_data="back_start")]]
             
         buttons_markup = InlineKeyboardMarkup(btn)
@@ -400,4 +426,3 @@ async def close_cb(c, q):
     except Exception as e:
         try: await q.message.delete()
         except: pass
-
