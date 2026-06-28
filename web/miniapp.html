@@ -69,11 +69,22 @@
 
         /* ── File card ── */
         .file-card{background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--border);cursor:pointer;transition:border-color .2s}
-        .file-card:active{border-color:rgba(229,9,20,.5)}
+        .file-card:active{border-color:rgba(229,9,20,.5);transform:scale(.96);transition:transform .1s}
+
+        /* ── STAGGERED CARD ENTRANCE ANIMATION ── */
+        @keyframes cardEnter{
+          0%  {opacity:0;transform:translateY(36px) scale(0.93)}
+          55% {opacity:1;transform:translateY(-5px) scale(1.015)}
+          75% {transform:translateY(2px) scale(0.998)}
+          100%{opacity:1;transform:translateY(0) scale(1)}
+        }
+        .card-enter{opacity:0;animation:cardEnter .6s cubic-bezier(.34,1.2,.64,1) forwards}
 
         /* ── Poster ── */
-        .poster-box{position:relative;padding-top:56.25%;background:var(--bg3);overflow:hidden}
-        .fc-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+        .poster-box{position:relative;padding-top:56.25%;background:linear-gradient(90deg,var(--bg3) 0px,#2a2a38 50%,var(--bg3) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite linear;overflow:hidden}
+        @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+        .fc-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s ease,transform .5s cubic-bezier(.25,1,.5,1)}
+        .fc-poster.loaded{opacity:1}
         .poster-top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:5px;padding:7px 8px}
         .type-chip{background:rgba(0,0,0,.75);backdrop-filter:blur(8px);color:#fff;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:800;letter-spacing:.8px;border:1px solid rgba(255,255,255,.14)}
         .size-chip{background:rgba(0,0,0,.60);backdrop-filter:blur(8px);color:#e0e0e0;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:600;border:1px solid rgba(255,255,255,.08)}
@@ -370,7 +381,7 @@
                     if (pMode !== 'none') {
                         posterHtml = `
                         <div class="poster-box" id="pb-${f.file_id}">
-                            <img src="${f.tg_thumb}" class="fc-poster" loading="lazy" onerror="handleThumbError('${f.file_id}')">
+                            <img src="${f.tg_thumb}" class="fc-poster" loading="lazy" onload="this.classList.add('loaded')" onerror="handleThumbError('${f.file_id}')">
                             <div class="poster-top">
                                 <span class="type-chip">${htmlEntities(f.type||'VIDEO')}</span>
                                 <span class="size-chip">${htmlEntities(f.size||'')}</span>
@@ -388,7 +399,7 @@
 
                     let safeName = htmlEntities(f.name);
                     html += `
-                    <div class="file-card" onclick="openStream('${f.file_id}','watch','${f.name.replace(/'/g,'\'').replace(/`/g,'\`')}')">
+                    <div class="file-card card-enter" onclick="openStream('${f.file_id}','watch','${f.name.replace(/'/g,'\'').replace(/`/g,'\`')}')">
                         ${posterHtml}
                         <div class="fc-body">
                             <div class="fc-name">${safeName}</div>
@@ -398,6 +409,7 @@
                 });
 
                 document.getElementById('results').innerHTML = html;
+                staggerCards(document.getElementById('results'));
                 nextOff = d.next_offset;
 
                 document.getElementById('pageBox').style.display = 'flex';
@@ -497,6 +509,15 @@
 
         function next() { if (nextOff) { curPage++; doSearch(nextOff); } }
         function prev() { if (curPage > 1) { curPage--; doSearch(Math.max(0, curOff - 21)); } }
+
+        function staggerCards(container){
+            container.querySelectorAll('.card-enter').forEach(function(c,i){
+                var delay=Math.min(i,10)*0.08;
+                c.style.animationDelay=delay+'s';
+                var totalDur=(0.6+delay)*1000;
+                setTimeout(function(){ c.classList.remove('card-enter'); c.style.animationDelay=''; },totalDur);
+            });
+        }
     </script>
     <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 </body>
