@@ -125,7 +125,8 @@ async def actors_directory_page(req):
             
             searchDirectory(true);
         }} else {{
-            updatePgUI(); 
+            updatePgUI();
+            staggerCards(document.getElementById('dir_grid_container'));
         }}
     }});
 
