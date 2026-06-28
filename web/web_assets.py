@@ -28,6 +28,10 @@ CSS = """
 .file-card:hover{transform:translateY(-6px) scale(1.02);border-color:var(--accent);box-shadow:0 15px 35px rgba(0,0,0,.6),0 0 15px rgba(229,9,20,.3);z-index:2}
 .file-card:active{transform:scale(.96);transition:transform .1s}
 
+/* ── STAGGERED CARD ENTRANCE ANIMATION ── */
+@keyframes cardEnter{0%{opacity:0;transform:translateY(28px) scale(0.95)}60%{opacity:1;transform:translateY(-4px) scale(1.01)}100%{opacity:1;transform:translateY(0) scale(1)}}
+.card-enter{opacity:0;animation:cardEnter .45s cubic-bezier(.22,1,.36,1) forwards}
+
 /* ── Poster box (With Shimmer Effect) ── */
 .poster-box{position:relative;padding-top:56.25%;background:linear-gradient(90deg, var(--bg3) 0px, var(--bg4) 50%, var(--bg3) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite linear;overflow:hidden;width:100%}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
@@ -74,6 +78,8 @@ CSS = """
 .act-card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:transform .22s cubic-bezier(.4,0,.2,1),border-color .22s,box-shadow .22s;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.2)}
 .act-card:hover{transform:translateY(-6px);border-color:rgba(229,9,20,.6);box-shadow:0 8px 22px rgba(229,9,20,.25)}
 .act-card:active{transform:scale(0.95);transition:transform .1s}
+
+/* act-card uses .card-enter (shared) */
 .act-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .4s cubic-bezier(.4,0,.2,1)}
 .act-card:hover .act-poster{transform:scale(1.1)}
 .act-text-card:active{transform:scale(0.97);transition:transform .1s}
@@ -236,6 +242,11 @@ function refreshGridAfterEdit() {
     if (typeof doSearch === 'function') doSearch(curOff);
     else if (typeof triggerActorSearchAjax === 'function') triggerActorSearchAjax();
     else window.location.reload();
+}
+function staggerCards(container){
+    container.querySelectorAll('.card-enter').forEach(function(c,i){
+        c.style.animationDelay=(Math.min(i,10)*0.05)+'s';
+    });
 }
 """.replace("__LIMIT_PLACEHOLDER__", str(MAX_WEB_RESULTS))
 
