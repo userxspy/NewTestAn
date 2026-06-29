@@ -31,6 +31,7 @@ primary = db["Primary"]
 cloud   = db["Cloud"]
 archive = db["Archive"]
 actors  = db["Actors"]  # 🎭 एक्टर प्रोफाइल के लिए डेटाबेस कलेक्शन
+posts   = db["Posts"]   # 📝 नया पोस्ट्स (CMS) कलेक्शन
 
 COLLECTIONS = {
     "primary": primary,
@@ -48,6 +49,7 @@ STATS_CACHE_TTL = 60
 # ⚡ INDEXES — Dynamic Configuration
 # ─────────────────────────────────────────────────────────
 async def ensure_indexes():
+    # 1. Files & Actors Indexes
     for name, col in COLLECTIONS.items():
         try:
             if name == "actors":
@@ -64,12 +66,21 @@ async def ensure_indexes():
             if "already exists" in str(e) or "IndexKeySpecsConflict" in str(e): pass
             else: logger.warning(f"Index warning [{name}]: {e}")
 
+    # 2. Actors Specific Indexes
     try:
         await actors.create_index([("name", "text")], name="actors_name_text")
         logger.info("✅ Actor Profile System Indexes OK")
     except Exception as e:
         if "already exists" not in str(e) and "IndexKeySpecsConflict" not in str(e):
             logger.warning(f"Actor Index warning: {e}")
+
+    # 3. Posts Specific Indexes (NEW)
+    try:
+        await posts.create_index([("title", "text"), ("tags", "text")], name="posts_search_idx")
+        logger.info("✅ Posts CMS Search Indexes OK")
+    except Exception as e:
+        if "already exists" not in str(e) and "IndexKeySpecsConflict" not in str(e):
+            logger.warning(f"Posts Index warning: {e}")
 
 # ─────────────────────────────────────────────────────────
 # 📊 DB STATS
@@ -176,7 +187,7 @@ async def _search(col, raw_query: str, regex, offset: int, limit: int, lang=None
         if docs:
             for doc in docs: 
                 doc["file_id"] = doc["_id"] 
-                doc["source_col"] = col.name.lower() # ✅ FIX: Web App कलर के लिए Source Label
+                doc["source_col"] = col.name.lower()
             count = 0 if bypass_count else await col.count_documents(text_flt)
             return docs, count
 
@@ -189,7 +200,7 @@ async def _search(col, raw_query: str, regex, offset: int, limit: int, lang=None
     docs = await cursor.to_list(length=limit)
     for doc in docs: 
         doc["file_id"] = doc["_id"]
-        doc["source_col"] = col.name.lower() # ✅ FIX: Web App कलर के लिए Source Label
+        doc["source_col"] = col.name.lower()
 
     count = 0 if bypass_count else (await col.count_documents(reg_flt) if docs else 0)
     return docs, count
@@ -211,7 +222,6 @@ async def get_search_results(query, max_results, offset=0, lang=None, collection
 
     results, total, actual_src = [], 0, collection_type
 
-    # 🚀 नया मल्टी-कलेक्शन (ALL) सर्च और मर्ज इंजन
     if collection_type == "all":
         clean_query = raw_query.replace('"', '').replace("'", "").strip()
         words = clean_query.split() if clean_query else []
@@ -230,7 +240,6 @@ async def get_search_results(query, max_results, offset=0, lang=None, collection
 
         if not flt: return [], "", 0, collection_type
 
-        # ⚡ तीनों कलेक्शन में एक साथ फास्ट काउंटिंग
         cnt_p, cnt_c, cnt_a = await asyncio.gather(
             get_count(primary, flt, bypass_count),
             get_count(cloud, flt, bypass_count),
@@ -239,13 +248,11 @@ async def get_search_results(query, max_results, offset=0, lang=None, collection
 
         total = cnt_p + cnt_c + cnt_a
 
-        # 🏷️ सोर्स का नाम डायनामिक तरीके से सेट करना
         sources = []
         if cnt_p > 0: sources.append("Primary")
         if cnt_c > 0: sources.append("Cloud")
         if cnt_a > 0: sources.append("Archive")
 
-        # ✅ FIX: अगर फाइल 1 से ज्यादा कलेक्शन में है तो "ALL" दिखाए, नहीं तो कलेक्शन का नाम
         if len(sources) > 1:
             actual_src = "All"
         elif len(sources) == 1:
@@ -253,7 +260,6 @@ async def get_search_results(query, max_results, offset=0, lang=None, collection
         else:
             actual_src = "None"
 
-        # 📑 अक्रॉस-कलेक्शन (Cross-Collection) पेजिनेशन लॉजिक
         rem_limit = max_results
         curr_offset = offset
 
@@ -275,13 +281,12 @@ async def get_search_results(query, max_results, offset=0, lang=None, collection
 
             for doc in docs:
                 doc["file_id"] = doc["_id"]
-                doc["source_col"] = col.name.lower() # ✅ FIX: Web App कलर के लिए Source Label
+                doc["source_col"] = col.name.lower()
             results.extend(docs)
 
             rem_limit -= len(docs)
             curr_offset = 0
 
-    # 📂 अगर किसी ने मैन्युअली किसी बटन (Primary/Cloud/Archive) पर क्लिक किया हो
     else:
         col = COLLECTIONS.get(collection_type, primary)
         results, total = await _search(col, raw_query, regex, offset, max_results, lang, bypass_count=bypass_count)
@@ -389,7 +394,7 @@ async def get_actor_search_results(actor_name, tags_list, max_results, offset=0,
         if docs:
             for doc in docs:
                 doc["file_id"] = doc["_id"]
-                doc["source_col"] = col.name.lower() # ✅ FIX
+                doc["source_col"] = col.name.lower()
             results.extend(docs)
             if len(results) >= max_results:
                 results = results[:max_results]
