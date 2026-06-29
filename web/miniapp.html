@@ -130,6 +130,38 @@
         .pg-btn:not(:disabled):active{background:var(--accent);color:#fff;border-color:var(--accent);transform:scale(.93)}
         .pg-info{font-size:12px;font-weight:700;color:var(--muted)}
 
+        /* ── Bottom Tab Bar ── */
+        .bottom-nav{position:fixed;bottom:0;left:0;right:0;height:56px;background:var(--bg2);border-top:1px solid var(--border);display:flex;z-index:200;backdrop-filter:blur(12px)}
+        .bnav-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--muted);transition:color .15s;-webkit-tap-highlight-color:transparent;border:none;background:none;font-family:inherit}
+        .bnav-tab .bnav-icon{font-size:20px;line-height:1;transition:transform .2s cubic-bezier(.34,1.4,.64,1)}
+        .bnav-tab.active{color:var(--accent)}
+        .bnav-tab.active .bnav-icon{transform:scale(1.18)}
+        body{padding-bottom:72px}
+
+        /* ── Page sections ── */
+        .page{display:none}.page.active{display:block}
+
+        /* ── Actor grid ── */
+        .act-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px}
+        @media(min-width:480px){.act-grid{grid-template-columns:repeat(4,1fr)}}
+        .act-card{background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--border);cursor:pointer;transition:transform .2s,border-color .2s}
+        .act-card:active{transform:scale(.95);border-color:rgba(229,9,20,.5)}
+        .act-poster-wrap{position:relative;padding-top:135%;background:linear-gradient(90deg,var(--bg3) 0,#2a2a38 50%,var(--bg3) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite linear;overflow:hidden}
+        .act-card [style*="padding-top:135%"]{background:linear-gradient(90deg,var(--bg3) 0,#2a2a38 50%,var(--bg3) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite linear}
+        .act-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s}
+        .act-poster.loaded{opacity:1}
+        .act-cat-chip{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.8);color:#fff;font-size:9px;padding:3px 7px;border-radius:4px;font-weight:800;border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(4px);z-index:2}
+        .act-name{padding:8px 8px 10px;font-size:11px;font-weight:800;color:var(--text);text-align:center;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+
+        /* ── Actor search zone ── */
+        .actor-search-zone{padding:12px 12px 0;position:sticky;top:52px;background:var(--bg);z-index:90;box-shadow:0 4px 12px rgba(0,0,0,.3)}
+        .actor-search-row{display:flex;gap:8px;margin-bottom:12px}
+
+        /* ── Actor state ── */
+        .act-state{text-align:center;padding:60px 20px;color:var(--muted);grid-column:1/-1}
+        .act-state-icon{font-size:36px;margin-bottom:10px}
+        .act-state-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px}
+
         /* ── Toast ── */
         .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);background:var(--accent);color:#fff;padding:10px 22px;border-radius:30px;font-weight:700;font-size:13px;transition:.3s;z-index:1000;white-space:nowrap;box-shadow:0 4px 15px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1)}
         .toast.show{transform:translateX(-50%) translateY(0)}
@@ -161,6 +193,8 @@
 
     </div>
 
+    <!-- ══ PAGE: VIDEOS ══ -->
+    <div class="page active" id="page-videos">
     <div class="search-zone">
         <div class="search-row">
             <div class="search-wrap">
@@ -209,6 +243,30 @@
         </div>
     </div>
 
+    </div><!-- /page-videos -->
+
+    <!-- ══ PAGE: ACTORS ══ -->
+    <div class="page" id="page-actors">
+        <div class="actor-search-zone">
+            <div class="actor-search-row">
+                <div class="search-wrap" style="flex:1">
+                    <input type="text" id="actQ" class="search-input" placeholder="Actor name search…" enterkeyhint="search" oninput="actDebounce()">
+                </div>
+            </div>
+        </div>
+        <div class="act-grid" id="actGrid">
+            <div class="act-state" style="grid-column:1/-1">
+                <div class="act-state-icon">🎭</div>
+                <div class="act-state-title">Loading actors…</div>
+            </div>
+        </div>
+        <div class="pagination" id="actPageBox" style="display:none">
+            <button class="pg-btn" id="actPBtn" onclick="actPrev()">◀ Prev</button>
+            <span class="pg-info" id="actPgInfo">Page 1</span>
+            <button class="pg-btn" id="actNBtn" onclick="actNext()">Next ▶</button>
+        </div>
+    </div><!-- /page-actors -->
+
     <div class="toast" id="toast"></div>
 
     <!-- Player Sheet -->
@@ -229,6 +287,16 @@
     </div>
     <div id="sheetToast" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(200px);background:var(--accent);color:#fff;padding:10px 22px;border-radius:30px;font-weight:700;font-size:13px;transition:.3s;z-index:10000;white-space:nowrap;pointer-events:none;opacity:0">Link Copied!</div>
 
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav">
+        <button class="bnav-tab active" id="tab-videos" onclick="switchTab('videos')">
+            <span class="bnav-icon">🎬</span>VIDEOS
+        </button>
+        <button class="bnav-tab" id="tab-actors" onclick="switchTab('actors')">
+            <span class="bnav-icon">🎭</span>ACTORS
+        </button>
+    </nav>
 
     <script>
         let tg = window.Telegram.WebApp;
@@ -404,7 +472,6 @@
                         ${posterHtml}
                         <div class="fc-body">
                             <div class="fc-name">${safeName}</div>
-                            <div class="fc-meta">${htmlEntities(f.size||'')} • ${htmlEntities(f.type||'')}</div>
                         </div>
                     </div>`;
                 });
@@ -510,6 +577,74 @@
 
         function next() { if (nextOff) { curPage++; doSearch(nextOff); } }
         function prev() { if (curPage > 1) { curPage--; doSearch(Math.max(0, curOff - 21)); } }
+
+        // ══ TAB SWITCHING ══
+        let actorsLoaded = false;
+        function switchTab(tab) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.bnav-tab').forEach(b => b.classList.remove('active'));
+            document.getElementById('page-' + tab).classList.add('active');
+            document.getElementById('tab-' + tab).classList.add('active');
+            if (tab === 'actors' && !actorsLoaded) { actorsLoaded = true; loadActors(0); }
+        }
+
+        // ══ ACTOR LIST ══
+        let actCurPage = 1, actCurOff = 0, actNextOff = '';
+        let actDebTimer = null;
+
+        function actDebounce() {
+            clearTimeout(actDebTimer);
+            actDebTimer = setTimeout(() => loadActors(0), 400);
+        }
+
+        async function loadActors(offset) {
+            const q = (document.getElementById('actQ').value || '').trim();
+            const grid = document.getElementById('actGrid');
+            actCurOff = offset;
+            if (offset === 0) actCurPage = 1;
+
+            grid.innerHTML = '<div class="act-state" style="grid-column:1/-1"><div class="act-state-icon">⏳</div><div class="act-state-title">Loading...</div></div>';
+            document.getElementById('actPageBox').style.display = 'none';
+
+            try {
+                const res = await fetch(
+                    `/api/directory/search?q=${encodeURIComponent(q)}&offset=${offset}&mode=poster`,
+                    { headers: { 'X-Telegram-Init-Data': INIT_DATA } }
+                );
+                if (!res.ok) { grid.innerHTML = '<div class="act-state" style="grid-column:1/-1"><div class="act-state-icon">❌</div><div class="act-state-title">Load failed</div></div>'; return; }
+                const d = await res.json();
+
+                if (!d.html || d.html.includes('No profiles')) {
+                    grid.innerHTML = '<div class="act-state" style="grid-column:1/-1"><div class="act-state-icon">🔎</div><div class="act-state-title">Koi actor nahi mila</div></div>';
+                    return;
+                }
+
+                // web वाला HTML miniapp के लिए adapt करो
+                grid.innerHTML = d.html
+                    .replace(/onclick="window\.location\.href='\/actor\//g, 'onclick="openActor('')
+                    .replace(/'" >/g, '')" >')
+                    .replace(/class="act-poster"/g, 'class="act-poster" onload="this.classList.add('loaded')"');
+
+                staggerCards(grid);
+                actNextOff = d.has_next ? offset + 20 : '';
+                document.getElementById('actPageBox').style.display = (offset > 0 || d.has_next) ? 'flex' : 'none';
+                document.getElementById('actPBtn').disabled = (offset === 0);
+                document.getElementById('actNBtn').disabled = !d.has_next;
+                document.getElementById('actPgInfo').textContent = 'Page ' + actCurPage;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } catch(e) {
+                grid.innerHTML = '<div class="act-state" style="grid-column:1/-1"><div class="act-state-icon">❌</div><div class="act-state-title">Connection fail</div></div>';
+            }
+        }
+
+        function openActor(id) {
+            tg.openLink(window.location.origin + '/actor/' + id);
+        }
+
+        function actNext() { if (actNextOff !== '') { actCurPage++; loadActors(actNextOff); } }
+        function actPrev() { if (actCurPage > 1) { actCurPage--; loadActors(Math.max(0, actCurOff - 20)); } }
+
+        document.getElementById('actQ').addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(actDebTimer); loadActors(0); } });
 
         function staggerCards(container){
             var cards=container.querySelectorAll('.card-enter');
