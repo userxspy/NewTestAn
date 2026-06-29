@@ -19,23 +19,19 @@ def fast_json(data):
     return orjson.dumps(data).decode('utf-8')
 
 # ─────────────────────────────────────────────────────────
-# 🛠️ ImgBB Auto-Converter Helper Functions (फिक्स किया गया)
+# 🛠️ ImgBB Auto-Converter Helper Functions
 # ─────────────────────────────────────────────────────────
 async def fetch_direct_ibb_url(session, url):
     url = url.strip()
     if not url: return None
-    # 🚨 ImgBB viewer link (i.e., NOT direct image link) needs to be fetched and parsed
     if "ibb.co" in url and "i.ibb.co" not in url:
         try:
-            # 1. Fetch the viewer page
             async with session.get(url, timeout=10) as resp:
                 if resp.status == 200:
                     html_content = await resp.text()
-                    # 2. Parse property="og:image", which is the direct image URL
                     match = re.search(r'<meta property="og:image" content="([^"]+)"', html_content)
                     if match: return match.group(1)
-        except Exception as e: 
-            print(f"Error converting ImgBB viewer link: {e}")
+        except Exception: pass
     return url
 
 async def convert_all_ibb_links(urls):
@@ -383,10 +379,7 @@ async def process_multipart_post(req, action="publish"):
                     tg_id = msg.photo.sizes[-1].file_id if hasattr(msg.photo, "sizes") and msg.photo.sizes else msg.photo.file_id
                     post_data["screenshots"].append(f"TG_ID:{tg_id}")
 
-    # 🚀 Convert ImgBB links (both cover and screenshots)
-    
     tasks = []
-    
     if post_data["cover_image"] and "ibb.co" in post_data["cover_image"]:
         tasks.append(convert_all_ibb_links([post_data["cover_image"]]))
 
@@ -429,7 +422,6 @@ async def api_update_post(req):
         post_data, post_id = await process_multipart_post(req, "update")
         if not post_id: return web.HTTPFound('/posts?err=Missing Post ID')
         
-        # Preserve old cover if not changed
         if not post_data.get("cover_image"):
             old_post = await posts_col.find_one({"_id": ObjectId(post_id)})
             if old_post and old_post.get("cover_image"): post_data["cover_image"] = old_post["cover_image"]
@@ -520,7 +512,7 @@ async def api_posts_search(req):
     return web.json_response({"html": html_out, "has_next": has_next}, dumps=fast_json)
 
 # ─────────────────────────────────────────────────────────
-# 🍿 6. PUBLIC ROUTE: SINGLE POST VIEW (Premium, Fixed ImgBB)
+# 🍿 6. PUBLIC ROUTE: SINGLE POST VIEW (Premium Custom View)
 # ─────────────────────────────────────────────────────────
 @post_routes.get('/post/{id}')
 async def single_post_display(req):
@@ -538,11 +530,11 @@ async def single_post_display(req):
     tags_html = "".join([f'<span style="background:var(--bg3); border:1px solid var(--border); color:var(--muted); font-size:11px; padding:4px 10px; border-radius:4px; font-weight:700;">#{html.escape(t)}</span>' for t in post.get("tags", [])])
     tags_div = f'<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">{tags_html}</div>' if tags_html else ""
     
-    # 🚀 NEW: EPISODES GROUPING LOGIC (Fixed fixed structure, matching fixed search structure)
+    # 🍿 Premium Netflix Style Layout
     video_buttons = ""
     videos = post.get("videos", [])
     if not videos:
-        video_buttons = '<div style="color:var(--muted); font-size:14px; text-align:center; padding:15px; border:1px dashed var(--border); border-radius:8px;">No files selected yet.</div>'
+        video_buttons = '<div style="color:var(--muted); font-size:14px; font-weight:bold;">No media attached.</div>'
     else:
         grouped_vids = {}
         for v in videos:
@@ -552,29 +544,29 @@ async def single_post_display(req):
             
         for heading, v_list in grouped_vids.items():
             video_buttons += f'''
-            <div style="background:var(--bg); border:1px solid var(--border); padding:15px; border-radius:8px; display:flex; flex-direction:column; gap:10px;">
-                <div style="width:100%; font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px;">📁 Group: {html.escape(heading)}</div>
-                <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">'''
+            <div style="margin-bottom:20px; background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+                <div style="font-size:16px; font-weight:900; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:10px;">
+                    <span style="background:var(--accent); width:5px; height:18px; border-radius:4px;"></span>
+                    {html.escape(heading)}
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; padding-left:15px;">'''
             
             for v in v_list:
                 vid_id = v.get('file_id')
                 v_name = html.escape(v.get('custom_name', 'Play'))
-                video_buttons += f'<a href="/setup_stream?file_id={vid_id}&mode=watch" target="_blank" style="background:var(--card); border:1px solid var(--border); color:var(--text); font-weight:800; font-size:13px; text-decoration:none; padding:10px 20px; border-radius:6px; transition:0.2s; box-shadow:0 4px 10px rgba(0,0,0,0.2);" onmouseover="this.style.background=\'var(--accent)\'; this.style.borderColor=\'var(--accent)\'; this.style.color=\'#fff\'; this.style.transform=\'translateY(-2px)\'" onmouseout="this.style.background=\'var(--card)\'; this.style.borderColor=\'var(--border)\'; this.style.color=\'var(--text)\'; this.style.transform=\'translateY(0)\'">🎬 {v_name}</a>'
+                video_buttons += f'<a href="/setup_stream?file_id={vid_id}&mode=watch" target="_blank" class="ep-btn">🎬 {v_name}</a>'
             
             video_buttons += '</div></div>'
     
     ss_html = ""
     for ss in post.get("screenshots", []):
         s_src = f"/api/post/photo?id={ss.replace('TG_ID:', '')}" if ss.startswith("TG_ID:") else ss
-        ss_html += f'<div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; aspect-ratio:16/9; background:var(--bg); box-shadow:0 4px 15px rgba(0,0,0,0.2);"><img src="{s_src}" style="width:100%; height:100%; object-fit:cover; cursor:pointer; transition:0.3s;" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'scale(1)\'" onclick="window.open(this.src, \'_blank\')"></div>'
+        ss_html += f'<div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; aspect-ratio:16/9; background:var(--bg3); box-shadow:0 4px 15px rgba(0,0,0,0.2);"><img src="{s_src}" style="width:100%; height:100%; object-fit:cover; cursor:pointer; transition:0.3s;" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'scale(1)\'" onclick="window.open(this.src, \'_blank\')"></div>'
     
-    gallery_card = f'''
-    <div class="step-card">
-        <div class="step-header"><span class="step-num">5</span><span class="step-title">Screenshots</span></div>
-        <div class="step-body">
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:15px;">{ss_html}</div>
-        </div>
-    </div>
+    # 📸 Screenshots Grid (बिना बाहरी कार्ड बॉक्स के, बिल्कुल साफ और बड़े आकार में)
+    gallery_section = f'''
+    <h3 style="font-size:20px; font-weight:800; color:var(--text); border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:20px; margin-top:40px;">📸 Screenshots</h3>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:20px;">{ss_html}</div>
     ''' if ss_html else ""
 
     admin_actions = f'''
@@ -586,18 +578,12 @@ async def single_post_display(req):
 
     page_body = f'''
     <style>
-        .step-card {{ background:var(--bg2); border:1px solid var(--border); border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.1); }}
-        .step-header {{ padding:15px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }}
-        .step-num {{ background:var(--bg4); color:var(--text); width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:800; font-size:13px; }}
-        .step-title {{ font-weight:800; font-size:13px; letter-spacing:1px; color:var(--text); text-transform:uppercase; }}
+        .step-card {{ background:var(--bg2); border:1px solid var(--border); border-radius:12px; margin-bottom:25px; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.1); }}
         .step-body {{ padding:20px; }}
         
-        .s-label {{ display:block; font-size:11px; font-weight:800; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }}
-        .s-input {{ width:100%; background:var(--bg); border:1px solid transparent; padding:14px; color:var(--text); border-radius:8px; margin-bottom:18px; outline:none; transition:0.2s; font-size:14px; font-weight:500; font-family:inherit; }}
-        .s-input:focus {{ border-color:var(--accent); }}
-        
-        .submit-btn {{ width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; transition:0.2s; letter-spacing:0.5px; margin-bottom:30px; }}
-        .submit-btn:hover {{ background:var(--accent-hover); transform:translateY(-2px); }}
+        .ep-btn {{ background:var(--card); border:1px solid var(--accent); color:var(--accent); font-weight:800; font-size:13px; text-decoration:none; padding:10px 20px; border-radius:6px; transition:0.2s; box-shadow:0 4px 10px rgba(0,0,0,0.2); display:inline-block; }}
+        .ep-btn:hover {{ background:var(--accent); color:#fff; transform:translateY(-2px); }}
+        .ep-btn:active {{ background:#fff !important; color:var(--accent) !important; border-color:#fff !important; transform:scale(0.92); transition:0s; }}
     </style>
 
     <div class="main" style="max-width:850px; margin:30px auto; padding:0 20px;">
@@ -606,14 +592,14 @@ async def single_post_display(req):
             <h2 style="font-size:22px; font-weight:800; color:var(--text); margin:0;">View Post</h2>
         </div>
         
-        <div class="main-card step-card" style="margin-bottom:20px;">
+        <div class="main-card step-card">
              <div class="step-body" style="padding:0;">
                  <div style="display:flex; flex-direction:column; gap:0;">
-                     <div style="width:100%; max-width:400px; aspect-ratio:3/4; overflow:hidden; border-radius:12px; margin:20px auto 10px auto; box-shadow:0 8px 25px rgba(0,0,0,0.3); border:1px solid var(--border);">
+                     <div style="width:100%; max-width:380px; aspect-ratio:3/4; overflow:hidden; border-radius:12px; margin:25px auto 10px auto; box-shadow:0 12px 35px rgba(0,0,0,0.4); border:1px solid var(--border);">
                          <img src="{img_src}" style="width:100%; height:100%; object-fit:cover;">
                      </div>
-                     <div style="padding:20px;">
-                         <h1 style="font-size:28px; font-weight:900; color:var(--text); margin:0 0 10px 0;">{html.escape(post.get("title", ""))}</h1>
+                     <div style="padding:25px 30px;">
+                         <h1 style="font-size:30px; font-weight:900; color:var(--text); margin:0 0 10px 0;">{html.escape(post.get("title", ""))}</h1>
                          {tags_div}
                          <div style="font-size:15px; color:var(--text); line-height:1.7; margin-top:20px; white-space:pre-line; font-weight:500;">
                              {html.escape(post.get("description", ""))}
@@ -623,16 +609,12 @@ async def single_post_display(req):
              </div>
         </div>
 
-        <div class="step-card" style="border-color:var(--accent);">
-            <div class="step-header" style="border-bottom-color:var(--accent);"><span class="step-num" style="background:var(--accent);">4</span><span class="step-title">Videos / Episodes</span></div>
-            <div class="step-body">
-                <div style="display:flex; flex-direction:column; gap:10px; min-height:50px;">
-                    {video_buttons}
-                </div>
-            </div>
+        <div style="margin-bottom:25px; margin-top:35px;">
+            <h3 style="font-size:20px; font-weight:800; color:var(--text); border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:25px;">🍿 Episodes / Download Links</h3>
+            {video_buttons}
         </div>
         
-        {gallery_card}
+        {gallery_section}
         {admin_actions}
 
     </div>
