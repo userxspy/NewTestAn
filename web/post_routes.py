@@ -7,7 +7,7 @@ from bson.objectid import ObjectId
 from utils import temp
 from info import THUMBNAIL_STORAGE_CHANNEL
 from database.users_chats_db import db as motor_db
-from web.web_assets import build_page, get_auth, form_wrapper
+from web.web_assets import build_page, get_auth
 
 post_routes = web.RouteTableDef()
 posts_col = motor_db.db["Posts"]
@@ -19,19 +19,23 @@ def fast_json(data):
     return orjson.dumps(data).decode('utf-8')
 
 # ─────────────────────────────────────────────────────────
-# 🛠️ ImgBB Auto-Converter Helper Functions
+# 🛠️ ImgBB Auto-Converter Helper Functions (फिक्स किया गया)
 # ─────────────────────────────────────────────────────────
 async def fetch_direct_ibb_url(session, url):
     url = url.strip()
     if not url: return None
+    # 🚨 ImgBB viewer link (i.e., NOT direct image link) needs to be fetched and parsed
     if "ibb.co" in url and "i.ibb.co" not in url:
         try:
-            async with session.get(url, timeout=5) as resp:
+            # 1. Fetch the viewer page
+            async with session.get(url, timeout=10) as resp:
                 if resp.status == 200:
                     html_content = await resp.text()
+                    # 2. Parse property="og:image", which is the direct image URL
                     match = re.search(r'<meta property="og:image" content="([^"]+)"', html_content)
                     if match: return match.group(1)
-        except Exception: pass
+        except Exception as e: 
+            print(f"Error converting ImgBB viewer link: {e}")
     return url
 
 async def convert_all_ibb_links(urls):
@@ -104,7 +108,7 @@ async def create_post_page(req):
                 <div class="step-header"><span class="step-num">2</span><span class="step-title">Cover Image</span></div>
                 <div class="step-body">
                     <label class="s-label">Image URL</label>
-                    <input type="text" name="cover_url" placeholder="Paste direct link..." class="s-input">
+                    <input type="text" name="cover_url" placeholder="Paste link (viewer or direct)..." class="s-input">
                     <label class="s-label">Or Upload File</label>
                     <input type="file" name="cover_file" accept="image/*" class="s-input" style="padding:10px; margin-bottom:0; cursor:pointer;">
                 </div>
@@ -114,7 +118,7 @@ async def create_post_page(req):
                 <div class="step-header"><span class="step-num">3</span><span class="step-title">Screenshots</span></div>
                 <div class="step-body">
                     <label class="s-label">Screenshot URLs</label>
-                    <textarea name="screenshot_urls" placeholder="Paste links line by line..." class="s-input" style="min-height:80px;"></textarea>
+                    <textarea name="screenshot_urls" placeholder="Paste viewer or direct links line by line..." class="s-input" style="min-height:80px;"></textarea>
                     <label class="s-label">And / Or Upload Files</label>
                     <input type="file" name="screenshot_files" accept="image/*" multiple class="s-input" style="padding:10px; margin-bottom:0; cursor:pointer;">
                 </div>
@@ -354,7 +358,6 @@ async def process_multipart_post(req, action="publish"):
         elif p_name == 'description': post_data["description"] = (await part.read()).decode().strip()
         elif p_name == 'tags': post_data["tags"] = [t.strip() for t in (await part.read()).decode().strip().split(",") if t.strip()]
         
-        # 🚀 3 Lists for Grouped Videos Processing
         elif p_name == 'video_id': temp_v_ids.append((await part.read()).decode().strip())
         elif p_name == 'video_heading': temp_v_headings.append((await part.read()).decode().strip())
         elif p_name == 'video_name': temp_v_names.append((await part.read()).decode().strip())
@@ -380,15 +383,28 @@ async def process_multipart_post(req, action="publish"):
                     tg_id = msg.photo.sizes[-1].file_id if hasattr(msg.photo, "sizes") and msg.photo.sizes else msg.photo.file_id
                     post_data["screenshots"].append(f"TG_ID:{tg_id}")
 
+    # 🚀 Convert ImgBB links (both cover and screenshots)
+    
+    tasks = []
+    
     if post_data["cover_image"] and "ibb.co" in post_data["cover_image"]:
-        converted_cover = await convert_all_ibb_links([post_data["cover_image"]])
-        if converted_cover: post_data["cover_image"] = converted_cover[0]
+        tasks.append(convert_all_ibb_links([post_data["cover_image"]]))
 
+    raw_urls = []
     if screenshot_urls_raw:
         raw_urls = [u.strip() for u in screenshot_urls_raw.split('\n') if u.strip()]
-        direct_urls = await convert_all_ibb_links(raw_urls)
-        post_data["screenshots"].extend(direct_urls)
+        tasks.append(convert_all_ibb_links(raw_urls))
         
+    if tasks:
+        all_results = await asyncio.gather(*tasks)
+        if len(tasks) == 1 and screenshot_urls_raw:
+             post_data["screenshots"].extend(all_results[0])
+        elif len(tasks) == 2:
+             if all_results[0]: post_data["cover_image"] = all_results[0][0]
+             post_data["screenshots"].extend(all_results[1])
+        elif len(tasks) == 1 and not screenshot_urls_raw:
+             if all_results[0]: post_data["cover_image"] = all_results[0][0]
+
     for vid, vheading, vname in zip(temp_v_ids, temp_v_headings, temp_v_names):
         if vid and vname: 
             post_data["videos"].append({"file_id": vid, "heading": vheading or "Download Links", "custom_name": vname})
@@ -504,7 +520,7 @@ async def api_posts_search(req):
     return web.json_response({"html": html_out, "has_next": has_next}, dumps=fast_json)
 
 # ─────────────────────────────────────────────────────────
-# 🍿 6. PUBLIC ROUTE: SINGLE POST VIEW (Episodes Grouped)
+# 🍿 6. PUBLIC ROUTE: SINGLE POST VIEW (Premium, Fixed ImgBB)
 # ─────────────────────────────────────────────────────────
 @post_routes.get('/post/{id}')
 async def single_post_display(req):
@@ -522,11 +538,11 @@ async def single_post_display(req):
     tags_html = "".join([f'<span style="background:var(--bg3); border:1px solid var(--border); color:var(--muted); font-size:11px; padding:4px 10px; border-radius:4px; font-weight:700;">#{html.escape(t)}</span>' for t in post.get("tags", [])])
     tags_div = f'<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;">{tags_html}</div>' if tags_html else ""
     
-    # 🚀 NEW: EPISODES GROUPING LOGIC (Netflix Style Layout)
+    # 🚀 NEW: EPISODES GROUPING LOGIC (Fixed fixed structure, matching fixed search structure)
     video_buttons = ""
     videos = post.get("videos", [])
     if not videos:
-        video_buttons = '<div style="color:var(--muted); font-size:14px; font-weight:bold;">No media attached.</div>'
+        video_buttons = '<div style="color:var(--muted); font-size:14px; text-align:center; padding:15px; border:1px dashed var(--border); border-radius:8px;">No files selected yet.</div>'
     else:
         grouped_vids = {}
         for v in videos:
@@ -536,12 +552,9 @@ async def single_post_display(req):
             
         for heading, v_list in grouped_vids.items():
             video_buttons += f'''
-            <div style="margin-bottom:20px; background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:15px; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-                <div style="font-size:16px; font-weight:900; color:var(--text); margin-bottom:12px; display:flex; align-items:center; gap:10px;">
-                    <span style="background:var(--accent); width:5px; height:18px; border-radius:4px;"></span>
-                    {html.escape(heading)}
-                </div>
-                <div style="display:flex; flex-wrap:wrap; gap:10px; padding-left:15px;">'''
+            <div style="background:var(--bg); border:1px solid var(--border); padding:15px; border-radius:8px; display:flex; flex-direction:column; gap:10px;">
+                <div style="width:100%; font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px;">📁 Group: {html.escape(heading)}</div>
+                <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">'''
             
             for v in v_list:
                 vid_id = v.get('file_id')
@@ -553,46 +566,75 @@ async def single_post_display(req):
     ss_html = ""
     for ss in post.get("screenshots", []):
         s_src = f"/api/post/photo?id={ss.replace('TG_ID:', '')}" if ss.startswith("TG_ID:") else ss
-        ss_html += f'<div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; aspect-ratio:16/9; background:var(--bg3); box-shadow:0 4px 15px rgba(0,0,0,0.2);"><img src="{s_src}" style="width:100%; height:100%; object-fit:cover; cursor:pointer; transition:0.3s;" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'scale(1)\'" onclick="window.open(this.src, \'_blank\')"></div>'
+        ss_html += f'<div style="border:1px solid var(--border); border-radius:8px; overflow:hidden; aspect-ratio:16/9; background:var(--bg); box-shadow:0 4px 15px rgba(0,0,0,0.2);"><img src="{s_src}" style="width:100%; height:100%; object-fit:cover; cursor:pointer; transition:0.3s;" onmouseover="this.style.transform=\'scale(1.03)\'" onmouseout="this.style.transform=\'scale(1)\'" onclick="window.open(this.src, \'_blank\')"></div>'
     
-    gallery_grid = f'<h3 style="font-size:20px; font-weight:800; color:var(--text); border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:20px; margin-top:40px;">📸 Screenshots</h3><div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:20px;">{ss_html}</div>' if ss_html else ""
+    gallery_card = f'''
+    <div class="step-card">
+        <div class="step-header"><span class="step-num">5</span><span class="step-title">Screenshots</span></div>
+        <div class="step-body">
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:15px;">{ss_html}</div>
+        </div>
+    </div>
+    ''' if ss_html else ""
 
     admin_actions = f'''
-    <div style="margin-top:30px; padding-top:20px; border-top:1px solid var(--border); display:flex; gap:10px;">
-        <a href="/admin/edit_post/{str(post['_id'])}" style="background:var(--bg4); border:1px solid var(--border); color:var(--text); padding:12px 24px; border-radius:8px; font-weight:800; text-decoration:none; font-size:14px;">✏️ Edit Post</a>
-        <button onclick="if(confirm('Are you sure you want to delete this post?')) {{ fetch('/api/post/delete', {{method:'POST', body:JSON.stringify({{post_id:'{str(post['_id'])}'}})}}).then(r=>r.json()).then(d=>{{ if(d.success) window.location.href='/posts'; else alert('Failed to delete'); }}) }}" style="background:rgba(160,8,8,0.8); border:1px solid rgba(229,9,20,0.5); color:#fff; padding:12px 24px; border-radius:8px; font-weight:800; cursor:pointer; font-size:14px;">🗑️ Delete</button>
+    <div style="margin-top:30px; padding:20px; border:1px dashed rgba(160,8,8,0.5); border-radius:12px; display:flex; gap:10px; background:var(--bg2);">
+        <a href="/admin/edit_post/{str(post['_id'])}" style="background:var(--bg3); border:1px solid var(--border); color:var(--text); padding:12px 24px; border-radius:8px; font-weight:800; text-decoration:none; font-size:14px; transition:0.2s;">✏️ Edit Post</a>
+        <button onclick="if(confirm('Are you sure you want to delete this post?')) {{ fetch('/api/post/delete', {{method:'POST', body:JSON.stringify({{post_id:'{str(post['_id'])}'}})}}).then(r=>r.json()).then(d=>{{ if(d.success) window.location.href='/posts'; else alert('Failed to delete'); }}) }}" style="background:rgba(160,8,8,0.8); border:none; color:#fff; padding:12px 24px; border-radius:8px; font-weight:800; cursor:pointer; font-size:14px; transition:0.2s;">🗑️ Delete</button>
     </div>
     ''' if role == 'admin' else ""
 
     page_body = f'''
-    <div class="main" style="max-width:950px; margin:30px auto; padding:0 20px;">
-        <div style="margin-bottom:20px;">
-            <a href="/posts" style="color:var(--muted); text-decoration:none; font-size:14px; font-weight:800;">← Back to Catalog</a>
+    <style>
+        .step-card {{ background:var(--bg2); border:1px solid var(--border); border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.1); }}
+        .step-header {{ padding:15px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }}
+        .step-num {{ background:var(--bg4); color:var(--text); width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:800; font-size:13px; }}
+        .step-title {{ font-weight:800; font-size:13px; letter-spacing:1px; color:var(--text); text-transform:uppercase; }}
+        .step-body {{ padding:20px; }}
+        
+        .s-label {{ display:block; font-size:11px; font-weight:800; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }}
+        .s-input {{ width:100%; background:var(--bg); border:1px solid transparent; padding:14px; color:var(--text); border-radius:8px; margin-bottom:18px; outline:none; transition:0.2s; font-size:14px; font-weight:500; font-family:inherit; }}
+        .s-input:focus {{ border-color:var(--accent); }}
+        
+        .submit-btn {{ width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; transition:0.2s; letter-spacing:0.5px; margin-bottom:30px; }}
+        .submit-btn:hover {{ background:var(--accent-hover); transform:translateY(-2px); }}
+    </style>
+
+    <div class="main" style="max-width:850px; margin:30px auto; padding:0 20px;">
+        <div style="display:flex; align-items:center; gap:15px; margin-bottom:25px;">
+            <a href="/posts" style="background:var(--bg3); color:var(--text); text-decoration:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:13px; border:1px solid var(--border); transition:0.2s;">← Catalog</a>
+            <h2 style="font-size:22px; font-weight:800; color:var(--text); margin:0;">View Post</h2>
         </div>
         
-        <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.3);">
-            <div style="width:100%; aspect-ratio:21/9; background:url('{img_src}') center/cover; position:relative;">
-                <div style="position:absolute; inset:0; background:linear-gradient(to top, var(--card) 0%, transparent 100%);"></div>
-                <div style="position:absolute; bottom:25px; left:30px; right:30px;">
-                    <h1 style="font-size:36px; font-weight:900; color:var(--text); margin-bottom:5px; text-shadow:0 2px 10px rgba(0,0,0,0.8);">{html.escape(post.get("title", ""))}</h1>
-                    {tags_div}
-                </div>
-            </div>
-            
-            <div style="padding:35px 30px;">
-                <div style="font-size:16px; color:var(--text); line-height:1.7; margin-bottom:40px; white-space:pre-line; font-weight:500;">
-                    {html.escape(post.get("description", ""))}
-                </div>
-                
-                <h3 style="font-size:20px; font-weight:800; color:var(--text); border-bottom:1px solid var(--border); padding-bottom:12px; margin-bottom:25px;">🍿 Episodes / Download Links</h3>
-                <div style="margin-bottom:30px;">
+        <div class="main-card step-card" style="margin-bottom:20px;">
+             <div class="step-body" style="padding:0;">
+                 <div style="display:flex; flex-direction:column; gap:0;">
+                     <div style="width:100%; max-width:400px; aspect-ratio:3/4; overflow:hidden; border-radius:12px; margin:20px auto 10px auto; box-shadow:0 8px 25px rgba(0,0,0,0.3); border:1px solid var(--border);">
+                         <img src="{img_src}" style="width:100%; height:100%; object-fit:cover;">
+                     </div>
+                     <div style="padding:20px;">
+                         <h1 style="font-size:28px; font-weight:900; color:var(--text); margin:0 0 10px 0;">{html.escape(post.get("title", ""))}</h1>
+                         {tags_div}
+                         <div style="font-size:15px; color:var(--text); line-height:1.7; margin-top:20px; white-space:pre-line; font-weight:500;">
+                             {html.escape(post.get("description", ""))}
+                         </div>
+                     </div>
+                 </div>
+             </div>
+        </div>
+
+        <div class="step-card" style="border-color:var(--accent);">
+            <div class="step-header" style="border-bottom-color:var(--accent);"><span class="step-num" style="background:var(--accent);">4</span><span class="step-title">Videos / Episodes</span></div>
+            <div class="step-body">
+                <div style="display:flex; flex-direction:column; gap:10px; min-height:50px;">
                     {video_buttons}
                 </div>
-                
-                {gallery_grid}
-                {admin_actions}
             </div>
         </div>
+        
+        {gallery_card}
+        {admin_actions}
+
     </div>
     '''
     return build_page(f"{post.get('title', 'Post')} - Catalog", page_body, "", "posts", role)
