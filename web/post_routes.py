@@ -50,7 +50,7 @@ async def create_post_page(req):
     
     html_content = '''
     <style>
-        .em-input { width:100%; background:var(--bg); border:1px solid var(--border); padding:12px; color:var(--text); margin-bottom:15px; border-radius:6px; outline:none; font-family:inherit; box-sizing:border-box; }
+        .em-input { width:100%; background:var(--bg); border:1px solid var(--border); padding:12px; color:var(--text); margin-bottom:15px; border-radius:6px; outline:none; font-family:inherit; }
         .em-input:focus { border-color:var(--accent); }
         .scard-label { font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }
         .step-box { background:var(--card); border:1px solid var(--border); padding:25px; border-radius:12px; margin-bottom:20px; box-shadow:0 8px 25px rgba(0,0,0,0.2); }
@@ -96,7 +96,7 @@ async def create_post_page(req):
                 <div id="videoSearchResults" style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; max-height:250px; overflow-y:auto; display:none; margin-bottom:20px; box-shadow:0 4px 15px rgba(0,0,0,0.5);"></div>
                 
                 <div class="scard-label">Selected Videos / Episodes:</div>
-                <div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px; background:var(--bg); border-radius:8px;"></div>
+                <div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px; padding:10px; background:var(--bg); border-radius:8px; border:1px dashed var(--border);"></div>
             </div>
 
             <button type="submit" style="width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:16px; cursor:pointer; box-shadow:0 8px 25px rgba(229,9,20,0.4); transition:0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">🚀 Publish Post</button>
@@ -121,21 +121,19 @@ async def create_post_page(req):
             resDiv.innerHTML = html;
         } catch(e) { resDiv.innerHTML = '<div style="padding:15px; color:var(--accent); text-align:center;">⚠️ Error!</div>'; }
     }
-    
     function addVideoToPost(fileId, fileName) {
         document.getElementById('videoSearchResults').style.display = 'none';
         const container = document.getElementById('selectedVideosContainer');
         const div = document.createElement('div');
-        // ✅ NEW: Mobile-friendly layout with absolute close button
-        div.style.cssText = "background:var(--bg2); border:1px solid var(--border); padding:16px; border-radius:8px; position:relative; margin-bottom:5px;";
+        div.style.cssText = "background:var(--card); border:1px solid var(--accent); padding:15px; border-radius:8px; display:flex; gap:15px; align-items:center;";
         div.innerHTML = `
-            <button type="button" onclick="this.parentElement.remove()" style="position:absolute; top:12px; right:12px; background:rgba(229,9,20,0.85); color:#fff; border:none; width:28px; height:28px; border-radius:6px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; transition:0.2s;">✖</button>
-            <div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:12px; padding-right:35px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 ${fileName}</div>
-            <input type="hidden" name="video_id" value="${fileId}">
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                <input type="text" name="video_heading" placeholder="Group Name (e.g. Episode 1)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:700;" required>
-                <input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:800; color:var(--accent);" required>
-            </div>`;
+            <div style="flex:1; min-width:0;">
+                <div style="font-size:11px; color:var(--muted); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 ${fileName}</div>
+                <input type="hidden" name="video_id" value="${fileId}">
+                <input type="text" name="video_heading" placeholder="Group Name (e.g. Episode 1 or Movie Links)" class="em-input" style="margin-bottom:8px; font-weight:700;" required>
+                <input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; font-weight:800; color:var(--accent);" required>
+            </div>
+            <button type="button" onclick="this.parentElement.remove()" style="background:rgba(160,8,8,0.8); color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold; height:fit-content;">✖</button>`;
         container.appendChild(div);
     }
     </script>
@@ -165,20 +163,19 @@ async def edit_post_page(req):
         vid = v.get('file_id')
         vheading = html.escape(v.get('heading', 'Download Links'))
         vname = html.escape(v.get('custom_name', '1080p'))
-        # ✅ NEW: Mobile-friendly layout for edit page
         video_html += f'''
-        <div style="background:var(--bg2); border:1px solid var(--border); padding:16px; border-radius:8px; position:relative; margin-bottom:5px;">
-            <button type="button" onclick="this.parentElement.remove()" style="position:absolute; top:12px; right:12px; background:rgba(229,9,20,0.85); color:#fff; border:none; width:28px; height:28px; border-radius:6px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; transition:0.2s;">✖</button>
-            <div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:12px; padding-right:35px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 Pre-selected Media</div>
-            <input type="hidden" name="video_id" value="{vid}">
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                <input type="text" name="video_heading" value="{vheading}" placeholder="Group Name (e.g. Episode 1)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:700;" required>
-                <input type="text" name="video_name" value="{vname}" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:800; color:var(--accent);" required>
+        <div style="background:var(--card); border:1px solid var(--accent); padding:15px; border-radius:8px; display:flex; gap:15px; align-items:center;">
+            <div style="flex:1; min-width:0;">
+                <div style="font-size:11px; color:var(--muted); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 Pre-selected Media</div>
+                <input type="hidden" name="video_id" value="{vid}">
+                <input type="text" name="video_heading" value="{vheading}" placeholder="Group Name (e.g. Episode 1)" class="em-input" style="margin-bottom:8px; font-weight:700;" required>
+                <input type="text" name="video_name" value="{vname}" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; font-weight:800; color:var(--accent);" required>
             </div>
+            <button type="button" onclick="this.parentElement.remove()" style="background:rgba(160,8,8,0.8); color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold; height:fit-content;">✖</button>
         </div>'''
 
     html_content = f'''
-    <style>.em-input {{ width:100%; background:var(--bg); border:1px solid var(--border); padding:12px; color:var(--text); margin-bottom:15px; border-radius:6px; outline:none; font-family:inherit; box-sizing:border-box; }} .em-input:focus {{ border-color:var(--accent); }} .scard-label {{ font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }} .step-box {{ background:var(--card); border:1px solid var(--border); padding:25px; border-radius:12px; margin-bottom:20px; box-shadow:0 8px 25px rgba(0,0,0,0.2); }}</style>
+    <style>.em-input {{ width:100%; background:var(--bg); border:1px solid var(--border); padding:12px; color:var(--text); margin-bottom:15px; border-radius:6px; outline:none; font-family:inherit; }} .em-input:focus {{ border-color:var(--accent); }} .scard-label {{ font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }} .step-box {{ background:var(--card); border:1px solid var(--border); padding:25px; border-radius:12px; margin-bottom:20px; box-shadow:0 8px 25px rgba(0,0,0,0.2); }}</style>
     <div class="main" style="max-width:850px; margin:30px auto; padding:0 20px;">
         <h2 style="font-size:28px; font-weight:900; margin-bottom:25px; color:var(--text); display:flex; justify-content:space-between; align-items:center;"><span>✏️ Edit Post</span><a href="/post/{post_id}" style="font-size:14px; font-weight:700; color:var(--muted); text-decoration:none;">← Cancel</a></h2>
         <form action="/api/post/update" method="post" enctype="multipart/form-data">
@@ -186,14 +183,13 @@ async def edit_post_page(req):
             <div class="step-box"><div class="scard-label">1. Post Title</div><input type="text" name="title" value="{title}" class="em-input" required><div class="scard-label" style="margin-top:10px;">2. Short Description</div><textarea name="description" class="em-input" style="min-height:120px;" required>{desc}</textarea><div class="scard-label" style="margin-top:10px;">3. Search Tags</div><input type="text" name="tags" value="{tags}" class="em-input"></div>
             <div class="step-box"><div class="scard-label">4. Cover Image</div><input type="text" name="cover_url" value="{cover_url}" placeholder="Paste ibb.co Link" class="em-input" style="margin-bottom:10px;"><div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">OR UPLOAD NEW FILE</div><input type="file" name="cover_file" accept="image/*" class="em-input" style="padding:8px;"></div>
             <div class="step-box"><div class="scard-label">5. Screenshots (Multiple)</div><textarea name="screenshot_urls" class="em-input" style="min-height:100px; white-space:pre-wrap; margin-bottom:10px;">{ss_urls}</textarea><div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">AND / OR UPLOAD FILES</div><input type="file" name="screenshot_files" accept="image/*" multiple class="em-input" style="padding:8px;"></div>
-            <div class="step-box" style="border-color:var(--accent);"><div class="scard-label" style="color:var(--accent);">6. Add Videos / Episodes</div><div style="display:flex; gap:10px; margin-bottom:10px;"><input type="text" id="videoSearchInput" placeholder="Search database..." class="em-input" style="margin-bottom:0;" onkeydown="if(event.key==='Enter'){{ event.preventDefault(); searchVideosForPost(); }}"><button type="button" onclick="searchVideosForPost()" style="background:var(--accent); color:#fff; border:none; padding:0 24px; border-radius:6px; font-weight:800; cursor:pointer;">Search</button></div><div id="videoSearchResults" style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; max-height:250px; overflow-y:auto; display:none; margin-bottom:20px;"></div><div class="scard-label">Selected Videos / Episodes:</div><div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px; background:var(--bg); border-radius:8px;">{video_html}</div></div>
+            <div class="step-box" style="border-color:var(--accent);"><div class="scard-label" style="color:var(--accent);">6. Add Videos / Episodes</div><div style="display:flex; gap:10px; margin-bottom:10px;"><input type="text" id="videoSearchInput" placeholder="Search database..." class="em-input" style="margin-bottom:0;" onkeydown="if(event.key==='Enter'){{ event.preventDefault(); searchVideosForPost(); }}"><button type="button" onclick="searchVideosForPost()" style="background:var(--accent); color:#fff; border:none; padding:0 24px; border-radius:6px; font-weight:800; cursor:pointer;">Search</button></div><div id="videoSearchResults" style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; max-height:250px; overflow-y:auto; display:none; margin-bottom:20px;"></div><div class="scard-label">Selected Videos / Episodes:</div><div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px; padding:10px; background:var(--bg); border-radius:8px; border:1px dashed var(--border);">{video_html}</div></div>
             <button type="submit" style="width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:16px; cursor:pointer;">💾 Save Changes</button>
         </form>
     </div>
     <script>
     async function searchVideosForPost() {{ const q = document.getElementById('videoSearchInput').value.trim(); if(!q) return; const resDiv = document.getElementById('videoSearchResults'); resDiv.style.display = 'block'; resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">🔍 Searching...</div>'; try {{ const response = await fetch('/api/search?q=' + encodeURIComponent(q) + '&mode=none'); const data = await response.json(); if(!data.results || data.results.length === 0) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">❌ No files found.</div>'; return; }} let html = ''; data.results.forEach(f => {{ const safeName = f.name.replace(/'/g, "\\\\\\'").replace(/"/g, "&quot;"); html += `<div style="padding:12px 15px; border-bottom:1px solid var(--border); cursor:pointer; transition:0.2s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'" onclick="addVideoToPost('${{f.file_id}}', '${{safeName}}')"><div style="font-weight:700; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${{f.name}}</div></div>`; }}); resDiv.innerHTML = html; }} catch(e) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--accent); text-align:center;">⚠️ Error!</div>'; }} }}
-    
-    function addVideoToPost(fileId, fileName) {{ document.getElementById('videoSearchResults').style.display = 'none'; const container = document.getElementById('selectedVideosContainer'); const div = document.createElement('div'); div.style.cssText = "background:var(--bg2); border:1px solid var(--border); padding:16px; border-radius:8px; position:relative; margin-bottom:5px;"; div.innerHTML = `<button type="button" onclick="this.parentElement.remove()" style="position:absolute; top:12px; right:12px; background:rgba(229,9,20,0.85); color:#fff; border:none; width:28px; height:28px; border-radius:6px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; transition:0.2s;">✖</button><div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:12px; padding-right:35px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 ${{fileName}}</div><input type="hidden" name="video_id" value="${{fileId}}"><div style="display:flex; flex-direction:column; gap:10px;"><input type="text" name="video_heading" placeholder="Group Name (e.g. Episode 2)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:700;" required><input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:800; color:var(--accent);" required></div>`; container.appendChild(div); }}
+    function addVideoToPost(fileId, fileName) {{ document.getElementById('videoSearchResults').style.display = 'none'; const container = document.getElementById('selectedVideosContainer'); const div = document.createElement('div'); div.style.cssText = "background:var(--card); border:1px solid var(--accent); padding:15px; border-radius:8px; display:flex; gap:15px; align-items:center;"; div.innerHTML = `<div style="flex:1; min-width:0;"><div style="font-size:11px; color:var(--muted); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 ${{fileName}}</div><input type="hidden" name="video_id" value="${{fileId}}"><input type="text" name="video_heading" placeholder="Group Name (e.g. Episode 2)" class="em-input" style="margin-bottom:8px; font-weight:700;" required><input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; font-weight:800; color:var(--accent);" required></div><button type="button" onclick="this.parentElement.remove()" style="background:rgba(160,8,8,0.8); color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold; height:fit-content;">✖</button>`; container.appendChild(div); }}
     </script>
     '''
     return build_page("Edit Post", form_wrapper("Edit Post", html_content, req.query.get('err',''), req.query.get('msg','')), "login-bg", "posts", role)
