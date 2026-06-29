@@ -48,97 +48,133 @@ async def create_post_page(req):
     role, _ = await get_auth(req)
     if role != 'admin': return web.HTTPFound('/dashboard')
     
-    html_content = '''
+    err = req.query.get('err','')
+    msg = req.query.get('msg','')
+    err_html = f'<div class="err-box" style="margin-bottom:20px;">{err}</div>' if err else ""
+    msg_html = f'<div class="success-box" style="margin-bottom:20px;">{msg}</div>' if msg else ""
+    
+    html_content = f'''
     <style>
-        .em-input { width:100%; background:var(--bg); border:1px solid var(--border); padding:12px; color:var(--text); margin-bottom:15px; border-radius:6px; outline:none; font-family:inherit; }
-        .em-input:focus { border-color:var(--accent); }
-        .scard-label { font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }
-        .step-box { background:var(--card); border:1px solid var(--border); padding:25px; border-radius:12px; margin-bottom:20px; box-shadow:0 8px 25px rgba(0,0,0,0.2); }
+        .page-header {{ display:flex; align-items:center; gap:15px; margin-bottom:25px; }}
+        .back-btn {{ background:var(--bg3); color:var(--text); text-decoration:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:13px; border:1px solid var(--border); transition:0.2s; display:inline-flex; align-items:center; }}
+        .back-btn:hover {{ background:var(--bg4); }}
+        .page-title {{ font-size:22px; font-weight:800; color:var(--text); margin:0; }}
+        
+        .step-card {{ background:var(--bg2); border:1px solid var(--border); border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.1); }}
+        .step-header {{ padding:15px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }}
+        .step-num {{ background:var(--bg4); color:var(--text); width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:800; font-size:13px; }}
+        .step-title {{ font-weight:800; font-size:13px; letter-spacing:1px; color:var(--text); text-transform:uppercase; }}
+        .step-body {{ padding:20px; }}
+        
+        .s-label {{ display:block; font-size:11px; font-weight:800; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }}
+        .s-input {{ width:100%; background:var(--bg); border:1px solid transparent; padding:14px; color:var(--text); border-radius:8px; margin-bottom:18px; outline:none; transition:0.2s; font-size:14px; font-weight:500; font-family:inherit; }}
+        .s-input:focus {{ border-color:var(--accent); }}
+        .s-input::placeholder {{ color:var(--muted); opacity:0.6; }}
+        
+        .submit-btn {{ width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; transition:0.2s; letter-spacing:0.5px; margin-bottom:30px; }}
+        .submit-btn:hover {{ background:var(--accent-hover); transform:translateY(-2px); }}
     </style>
 
-    <div class="main" style="max-width:850px; margin:30px auto; padding:0 20px;">
-        <h2 style="font-size:28px; font-weight:900; margin-bottom:25px; color:var(--text); display:flex; justify-content:space-between; align-items:center;">
-            <span>📝 Create New Post</span>
-            <a href="/posts" style="font-size:14px; font-weight:700; color:var(--muted); text-decoration:none;">← Back to Posts</a>
-        </h2>
+    <div class="main" style="max-width:700px; margin:0 auto; padding:30px 20px;">
+        <div class="page-header">
+            <a href="/posts" class="back-btn">← Cancel</a>
+            <h2 class="page-title">New Post</h2>
+        </div>
+        
+        {err_html}
+        {msg_html}
         
         <form action="/api/post/publish" method="post" enctype="multipart/form-data">
-            <div class="step-box">
-                <div class="scard-label">1. Post Title</div>
-                <input type="text" name="title" placeholder="e.g. Panchayat S03 or Pushpa 2" class="em-input" required>
-                <div class="scard-label" style="margin-top:10px;">2. Short Description</div>
-                <textarea name="description" placeholder="Write a short description..." class="em-input" style="min-height:120px;" required></textarea>
-                <div class="scard-label" style="margin-top:10px;">3. Search Tags (Comma Separated)</div>
-                <input type="text" name="tags" placeholder="e.g. Action, Web Series, 2024" class="em-input">
-            </div>
-
-            <div class="step-box">
-                <div class="scard-label">4. Cover Image</div>
-                <input type="text" name="cover_url" placeholder="Paste ibb.co Link (Viewer or Direct)" class="em-input" style="margin-bottom:10px;">
-                <div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">OR UPLOAD FILE</div>
-                <input type="file" name="cover_file" accept="image/*" class="em-input" style="padding:8px;">
-            </div>
-
-            <div class="step-box">
-                <div class="scard-label">5. Screenshots (Multiple)</div>
-                <textarea name="screenshot_urls" placeholder="Paste ibb.co links line by line..." class="em-input" style="min-height:100px; white-space:pre-wrap; margin-bottom:10px;"></textarea>
-                <div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">AND / OR UPLOAD FILES</div>
-                <input type="file" name="screenshot_files" accept="image/*" multiple class="em-input" style="padding:8px;">
-            </div>
-
-            <div class="step-box" style="border-color:var(--accent);">
-                <div class="scard-label" style="color:var(--accent);">6. Add Videos / Episodes</div>
-                <div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <input type="text" id="videoSearchInput" placeholder="Search database for files..." class="em-input" style="margin-bottom:0;" onkeydown="if(event.key==='Enter'){ event.preventDefault(); searchVideosForPost(); }">
-                    <button type="button" onclick="searchVideosForPost()" style="background:var(--accent); color:#fff; border:none; padding:0 24px; border-radius:6px; font-weight:800; cursor:pointer;">Search</button>
+            
+            <div class="step-card">
+                <div class="step-header"><span class="step-num">1</span><span class="step-title">Basic Information</span></div>
+                <div class="step-body">
+                    <label class="s-label">Post Title</label>
+                    <input type="text" name="title" placeholder="e.g. Panchayat S03" class="s-input" required>
+                    
+                    <label class="s-label">Short Description</label>
+                    <textarea name="description" placeholder="Write something about this post..." class="s-input" style="min-height:100px; resize:vertical;" required></textarea>
+                    
+                    <label class="s-label">Search Tags (Comma Separated)</label>
+                    <input type="text" name="tags" placeholder="e.g. Action, Web Series" class="s-input" style="margin-bottom:0;">
                 </div>
-                
-                <div id="videoSearchResults" style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; max-height:250px; overflow-y:auto; display:none; margin-bottom:20px; box-shadow:0 4px 15px rgba(0,0,0,0.5);"></div>
-                
-                <div class="scard-label">Selected Videos / Episodes:</div>
-                <div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px; padding:10px; background:var(--bg); border-radius:8px; border:1px dashed var(--border);"></div>
             </div>
 
-            <button type="submit" style="width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:16px; cursor:pointer; box-shadow:0 8px 25px rgba(229,9,20,0.4); transition:0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">🚀 Publish Post</button>
+            <div class="step-card">
+                <div class="step-header"><span class="step-num">2</span><span class="step-title">Cover Image</span></div>
+                <div class="step-body">
+                    <label class="s-label">Image URL</label>
+                    <input type="text" name="cover_url" placeholder="Paste direct link..." class="s-input">
+                    <label class="s-label">Or Upload File</label>
+                    <input type="file" name="cover_file" accept="image/*" class="s-input" style="padding:10px; margin-bottom:0; cursor:pointer;">
+                </div>
+            </div>
+
+            <div class="step-card">
+                <div class="step-header"><span class="step-num">3</span><span class="step-title">Screenshots</span></div>
+                <div class="step-body">
+                    <label class="s-label">Screenshot URLs</label>
+                    <textarea name="screenshot_urls" placeholder="Paste links line by line..." class="s-input" style="min-height:80px;"></textarea>
+                    <label class="s-label">And / Or Upload Files</label>
+                    <input type="file" name="screenshot_files" accept="image/*" multiple class="s-input" style="padding:10px; margin-bottom:0; cursor:pointer;">
+                </div>
+            </div>
+
+            <div class="step-card" style="border-color:var(--accent);">
+                <div class="step-header" style="border-bottom-color:var(--accent);"><span class="step-num" style="background:var(--accent);">4</span><span class="step-title">Videos / Episodes</span></div>
+                <div class="step-body">
+                    <div style="display:flex; gap:10px; margin-bottom:15px;">
+                        <input type="text" id="videoSearchInput" placeholder="Search files in database..." class="s-input" style="margin-bottom:0;" onkeydown="if(event.key==='Enter'){{ event.preventDefault(); searchVideosForPost(); }}">
+                        <button type="button" onclick="searchVideosForPost()" style="background:var(--bg3); color:var(--text); border:1px solid var(--border); padding:0 20px; border-radius:8px; font-weight:800; cursor:pointer;">Search</button>
+                    </div>
+                    <div id="videoSearchResults" style="background:var(--bg); border-radius:8px; max-height:200px; overflow-y:auto; display:none; margin-bottom:20px; border:1px solid var(--border);"></div>
+                    
+                    <label class="s-label">Selected Media</label>
+                    <div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px;">
+                        <div style="color:var(--muted); font-size:12px; text-align:center; padding:15px; border:1px dashed var(--border); border-radius:8px;">No files selected yet.</div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn">Publish Post</button>
         </form>
     </div>
 
     <script>
-    async function searchVideosForPost() {
+    async function searchVideosForPost() {{
         const q = document.getElementById('videoSearchInput').value.trim();
         if(!q) return;
         const resDiv = document.getElementById('videoSearchResults');
-        resDiv.style.display = 'block'; resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">🔍 Searching...</div>';
-        try {
+        resDiv.style.display = 'block'; resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center; font-size:12px;">🔍 Searching...</div>';
+        try {{
             const response = await fetch('/api/search?q=' + encodeURIComponent(q) + '&mode=none');
             const data = await response.json();
-            if(!data.results || data.results.length === 0) { resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">❌ No files found.</div>'; return; }
+            if(!data.results || data.results.length === 0) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center; font-size:12px;">❌ No files found.</div>'; return; }}
             let html = '';
-            data.results.forEach(f => {
-                const safeName = f.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                html += `<div style="padding:12px 15px; border-bottom:1px solid var(--border); cursor:pointer; transition:0.2s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'" onclick="addVideoToPost('${f.file_id}', '${safeName}')"><div style="font-weight:700; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${f.name}</div><div style="font-size:11px; color:var(--muted); margin-top:4px;"><span style="background:var(--bg4); padding:2px 6px; border-radius:4px;">${f.size}</span></div></div>`;
-            });
+            data.results.forEach(f => {{
+                const safeName = f.name.replace(/'/g, "\\\\'").replace(/"/g, "&quot;");
+                html += `<div style="padding:12px 15px; border-bottom:1px solid var(--border); cursor:pointer;" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'" onclick="addVideoToPost('${{f.file_id}}', '${{safeName}}')"><div style="font-weight:700; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${{f.name}}</div><div style="font-size:11px; color:var(--muted); margin-top:4px;">${{f.size}}</div></div>`;
+            }});
             resDiv.innerHTML = html;
-        } catch(e) { resDiv.innerHTML = '<div style="padding:15px; color:var(--accent); text-align:center;">⚠️ Error!</div>'; }
-    }
-    function addVideoToPost(fileId, fileName) {
+        }} catch(e) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--accent); text-align:center;">⚠️ Error!</div>'; }}
+    }}
+    function addVideoToPost(fileId, fileName) {{
         document.getElementById('videoSearchResults').style.display = 'none';
         const container = document.getElementById('selectedVideosContainer');
+        if(container.innerHTML.includes('No files selected yet.')) container.innerHTML = '';
         const div = document.createElement('div');
-        div.style.cssText = "background:var(--card); border:1px solid var(--accent); padding:15px; border-radius:8px; display:flex; gap:15px; align-items:center;";
+        div.style.cssText = "background:var(--bg); border:1px solid var(--border); padding:15px; border-radius:8px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;";
         div.innerHTML = `
-            <div style="flex:1; min-width:0;">
-                <div style="font-size:11px; color:var(--muted); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 ${fileName}</div>
-                <input type="hidden" name="video_id" value="${fileId}">
-                <input type="text" name="video_heading" placeholder="Group Name (e.g. Episode 1 or Movie Links)" class="em-input" style="margin-bottom:8px; font-weight:700;" required>
-                <input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; font-weight:800; color:var(--accent);" required>
-            </div>
-            <button type="button" onclick="this.parentElement.remove()" style="background:rgba(160,8,8,0.8); color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold; height:fit-content;">✖</button>`;
+            <div style="width:100%; font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px;">📁 ${{fileName}}</div>
+            <input type="hidden" name="video_id" value="${{fileId}}">
+            <input type="text" name="video_heading" placeholder="Group Name (e.g. Ep 1)" class="s-input" style="margin-bottom:0; flex:1; min-width:120px; padding:10px;" required>
+            <input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="s-input" style="margin-bottom:0; flex:1; min-width:100px; padding:10px; color:var(--accent);" required>
+            <button type="button" onclick="this.parentElement.remove()" style="background:var(--bg3); color:var(--muted); border:1px solid var(--border); padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">✖</button>`;
         container.appendChild(div);
-    }
+    }}
     </script>
     '''
-    return build_page("Create Post", form_wrapper("New Post", html_content, req.query.get('err',''), req.query.get('msg','')), "login-bg", "posts", role)
+    return build_page("Create Post", html_content, "", "posts", role)
 
 # ─────────────────────────────────────────────────────────
 # ✏️ 2. ADMIN ROUTE: EDIT POST WIZARD (UI)
@@ -164,35 +200,137 @@ async def edit_post_page(req):
         vheading = html.escape(v.get('heading', 'Download Links'))
         vname = html.escape(v.get('custom_name', '1080p'))
         video_html += f'''
-        <div style="background:var(--card); border:1px solid var(--accent); padding:15px; border-radius:8px; display:flex; gap:15px; align-items:center;">
-            <div style="flex:1; min-width:0;">
-                <div style="font-size:11px; color:var(--muted); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 Pre-selected Media</div>
-                <input type="hidden" name="video_id" value="{vid}">
-                <input type="text" name="video_heading" value="{vheading}" placeholder="Group Name (e.g. Episode 1)" class="em-input" style="margin-bottom:8px; font-weight:700;" required>
-                <input type="text" name="video_name" value="{vname}" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; font-weight:800; color:var(--accent);" required>
-            </div>
-            <button type="button" onclick="this.parentElement.remove()" style="background:rgba(160,8,8,0.8); color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold; height:fit-content;">✖</button>
+        <div style="background:var(--bg); border:1px solid var(--border); padding:15px; border-radius:8px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+            <div style="width:100%; font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px;">📁 Pre-selected Media</div>
+            <input type="hidden" name="video_id" value="{vid}">
+            <input type="text" name="video_heading" value="{vheading}" placeholder="Group Name" class="s-input" style="margin-bottom:0; flex:1; min-width:120px; padding:10px;" required>
+            <input type="text" name="video_name" value="{vname}" placeholder="Quality" class="s-input" style="margin-bottom:0; flex:1; min-width:100px; padding:10px; color:var(--accent);" required>
+            <button type="button" onclick="this.parentElement.remove()" style="background:var(--bg3); color:var(--muted); border:1px solid var(--border); padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">✖</button>
         </div>'''
+        
+    if not video_html:
+        video_html = '<div style="color:var(--muted); font-size:12px; text-align:center; padding:15px; border:1px dashed var(--border); border-radius:8px;">No files selected yet.</div>'
 
     html_content = f'''
-    <style>.em-input {{ width:100%; background:var(--bg); border:1px solid var(--border); padding:12px; color:var(--text); margin-bottom:15px; border-radius:6px; outline:none; font-family:inherit; }} .em-input:focus {{ border-color:var(--accent); }} .scard-label {{ font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }} .step-box {{ background:var(--card); border:1px solid var(--border); padding:25px; border-radius:12px; margin-bottom:20px; box-shadow:0 8px 25px rgba(0,0,0,0.2); }}</style>
-    <div class="main" style="max-width:850px; margin:30px auto; padding:0 20px;">
-        <h2 style="font-size:28px; font-weight:900; margin-bottom:25px; color:var(--text); display:flex; justify-content:space-between; align-items:center;"><span>✏️ Edit Post</span><a href="/post/{post_id}" style="font-size:14px; font-weight:700; color:var(--muted); text-decoration:none;">← Cancel</a></h2>
+    <style>
+        .page-header {{ display:flex; align-items:center; gap:15px; margin-bottom:25px; }}
+        .back-btn {{ background:var(--bg3); color:var(--text); text-decoration:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:13px; border:1px solid var(--border); transition:0.2s; display:inline-flex; align-items:center; }}
+        .back-btn:hover {{ background:var(--bg4); }}
+        .page-title {{ font-size:22px; font-weight:800; color:var(--text); margin:0; }}
+        
+        .step-card {{ background:var(--bg2); border:1px solid var(--border); border-radius:12px; margin-bottom:20px; overflow:hidden; box-shadow:0 4px 15px rgba(0,0,0,0.1); }}
+        .step-header {{ padding:15px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }}
+        .step-num {{ background:var(--bg4); color:var(--text); width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-weight:800; font-size:13px; }}
+        .step-title {{ font-weight:800; font-size:13px; letter-spacing:1px; color:var(--text); text-transform:uppercase; }}
+        .step-body {{ padding:20px; }}
+        
+        .s-label {{ display:block; font-size:11px; font-weight:800; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }}
+        .s-input {{ width:100%; background:var(--bg); border:1px solid transparent; padding:14px; color:var(--text); border-radius:8px; margin-bottom:18px; outline:none; transition:0.2s; font-size:14px; font-weight:500; font-family:inherit; }}
+        .s-input:focus {{ border-color:var(--accent); }}
+        .s-input::placeholder {{ color:var(--muted); opacity:0.6; }}
+        
+        .submit-btn {{ width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:15px; cursor:pointer; transition:0.2s; letter-spacing:0.5px; margin-bottom:30px; }}
+        .submit-btn:hover {{ background:var(--accent-hover); transform:translateY(-2px); }}
+    </style>
+
+    <div class="main" style="max-width:700px; margin:0 auto; padding:30px 20px;">
+        <div class="page-header">
+            <a href="/post/{post_id}" class="back-btn">← Cancel</a>
+            <h2 class="page-title">Edit Post</h2>
+        </div>
+        
         <form action="/api/post/update" method="post" enctype="multipart/form-data">
             <input type="hidden" name="post_id" value="{post_id}">
-            <div class="step-box"><div class="scard-label">1. Post Title</div><input type="text" name="title" value="{title}" class="em-input" required><div class="scard-label" style="margin-top:10px;">2. Short Description</div><textarea name="description" class="em-input" style="min-height:120px;" required>{desc}</textarea><div class="scard-label" style="margin-top:10px;">3. Search Tags</div><input type="text" name="tags" value="{tags}" class="em-input"></div>
-            <div class="step-box"><div class="scard-label">4. Cover Image</div><input type="text" name="cover_url" value="{cover_url}" placeholder="Paste ibb.co Link" class="em-input" style="margin-bottom:10px;"><div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">OR UPLOAD NEW FILE</div><input type="file" name="cover_file" accept="image/*" class="em-input" style="padding:8px;"></div>
-            <div class="step-box"><div class="scard-label">5. Screenshots (Multiple)</div><textarea name="screenshot_urls" class="em-input" style="min-height:100px; white-space:pre-wrap; margin-bottom:10px;">{ss_urls}</textarea><div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">AND / OR UPLOAD FILES</div><input type="file" name="screenshot_files" accept="image/*" multiple class="em-input" style="padding:8px;"></div>
-            <div class="step-box" style="border-color:var(--accent);"><div class="scard-label" style="color:var(--accent);">6. Add Videos / Episodes</div><div style="display:flex; gap:10px; margin-bottom:10px;"><input type="text" id="videoSearchInput" placeholder="Search database..." class="em-input" style="margin-bottom:0;" onkeydown="if(event.key==='Enter'){{ event.preventDefault(); searchVideosForPost(); }}"><button type="button" onclick="searchVideosForPost()" style="background:var(--accent); color:#fff; border:none; padding:0 24px; border-radius:6px; font-weight:800; cursor:pointer;">Search</button></div><div id="videoSearchResults" style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; max-height:250px; overflow-y:auto; display:none; margin-bottom:20px;"></div><div class="scard-label">Selected Videos / Episodes:</div><div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px; padding:10px; background:var(--bg); border-radius:8px; border:1px dashed var(--border);">{video_html}</div></div>
-            <button type="submit" style="width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:16px; cursor:pointer;">💾 Save Changes</button>
+            
+            <div class="step-card">
+                <div class="step-header"><span class="step-num">1</span><span class="step-title">Basic Information</span></div>
+                <div class="step-body">
+                    <label class="s-label">Post Title</label>
+                    <input type="text" name="title" value="{title}" class="s-input" required>
+                    
+                    <label class="s-label">Short Description</label>
+                    <textarea name="description" class="s-input" style="min-height:100px; resize:vertical;" required>{desc}</textarea>
+                    
+                    <label class="s-label">Search Tags</label>
+                    <input type="text" name="tags" value="{tags}" class="s-input" style="margin-bottom:0;">
+                </div>
+            </div>
+
+            <div class="step-card">
+                <div class="step-header"><span class="step-num">2</span><span class="step-title">Cover Image</span></div>
+                <div class="step-body">
+                    <label class="s-label">Image URL</label>
+                    <input type="text" name="cover_url" value="{cover_url}" class="s-input">
+                    <label class="s-label">Or Upload New File</label>
+                    <input type="file" name="cover_file" accept="image/*" class="s-input" style="padding:10px; margin-bottom:0; cursor:pointer;">
+                </div>
+            </div>
+
+            <div class="step-card">
+                <div class="step-header"><span class="step-num">3</span><span class="step-title">Screenshots</span></div>
+                <div class="step-body">
+                    <label class="s-label">Screenshot URLs</label>
+                    <textarea name="screenshot_urls" class="s-input" style="min-height:80px;">{ss_urls}</textarea>
+                    <label class="s-label">And / Or Upload Files</label>
+                    <input type="file" name="screenshot_files" accept="image/*" multiple class="s-input" style="padding:10px; margin-bottom:0; cursor:pointer;">
+                </div>
+            </div>
+
+            <div class="step-card" style="border-color:var(--accent);">
+                <div class="step-header" style="border-bottom-color:var(--accent);"><span class="step-num" style="background:var(--accent);">4</span><span class="step-title">Videos / Episodes</span></div>
+                <div class="step-body">
+                    <div style="display:flex; gap:10px; margin-bottom:15px;">
+                        <input type="text" id="videoSearchInput" placeholder="Search files in database..." class="s-input" style="margin-bottom:0;" onkeydown="if(event.key==='Enter'){{ event.preventDefault(); searchVideosForPost(); }}">
+                        <button type="button" onclick="searchVideosForPost()" style="background:var(--bg3); color:var(--text); border:1px solid var(--border); padding:0 20px; border-radius:8px; font-weight:800; cursor:pointer;">Search</button>
+                    </div>
+                    <div id="videoSearchResults" style="background:var(--bg); border-radius:8px; max-height:200px; overflow-y:auto; display:none; margin-bottom:20px; border:1px solid var(--border);"></div>
+                    
+                    <label class="s-label">Selected Media</label>
+                    <div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px;">
+                        {video_html}
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn">💾 Save Changes</button>
         </form>
     </div>
+    
     <script>
-    async function searchVideosForPost() {{ const q = document.getElementById('videoSearchInput').value.trim(); if(!q) return; const resDiv = document.getElementById('videoSearchResults'); resDiv.style.display = 'block'; resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">🔍 Searching...</div>'; try {{ const response = await fetch('/api/search?q=' + encodeURIComponent(q) + '&mode=none'); const data = await response.json(); if(!data.results || data.results.length === 0) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">❌ No files found.</div>'; return; }} let html = ''; data.results.forEach(f => {{ const safeName = f.name.replace(/'/g, "\\\\\\'").replace(/"/g, "&quot;"); html += `<div style="padding:12px 15px; border-bottom:1px solid var(--border); cursor:pointer; transition:0.2s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'" onclick="addVideoToPost('${{f.file_id}}', '${{safeName}}')"><div style="font-weight:700; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${{f.name}}</div></div>`; }}); resDiv.innerHTML = html; }} catch(e) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--accent); text-align:center;">⚠️ Error!</div>'; }} }}
-    function addVideoToPost(fileId, fileName) {{ document.getElementById('videoSearchResults').style.display = 'none'; const container = document.getElementById('selectedVideosContainer'); const div = document.createElement('div'); div.style.cssText = "background:var(--card); border:1px solid var(--accent); padding:15px; border-radius:8px; display:flex; gap:15px; align-items:center;"; div.innerHTML = `<div style="flex:1; min-width:0;"><div style="font-size:11px; color:var(--muted); margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 ${{fileName}}</div><input type="hidden" name="video_id" value="${{fileId}}"><input type="text" name="video_heading" placeholder="Group Name (e.g. Episode 2)" class="em-input" style="margin-bottom:8px; font-weight:700;" required><input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; font-weight:800; color:var(--accent);" required></div><button type="button" onclick="this.parentElement.remove()" style="background:rgba(160,8,8,0.8); color:#fff; border:none; padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold; height:fit-content;">✖</button>`; container.appendChild(div); }}
+    async function searchVideosForPost() {{
+        const q = document.getElementById('videoSearchInput').value.trim();
+        if(!q) return;
+        const resDiv = document.getElementById('videoSearchResults');
+        resDiv.style.display = 'block'; resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center; font-size:12px;">🔍 Searching...</div>';
+        try {{
+            const response = await fetch('/api/search?q=' + encodeURIComponent(q) + '&mode=none');
+            const data = await response.json();
+            if(!data.results || data.results.length === 0) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center; font-size:12px;">❌ No files found.</div>'; return; }}
+            let html = '';
+            data.results.forEach(f => {{
+                const safeName = f.name.replace(/'/g, "\\\\'").replace(/"/g, "&quot;");
+                html += `<div style="padding:12px 15px; border-bottom:1px solid var(--border); cursor:pointer;" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'" onclick="addVideoToPost('${{f.file_id}}', '${{safeName}}')"><div style="font-weight:700; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${{f.name}}</div></div>`;
+            }});
+            resDiv.innerHTML = html;
+        }} catch(e) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--accent); text-align:center;">⚠️ Error!</div>'; }}
+    }}
+    function addVideoToPost(fileId, fileName) {{
+        document.getElementById('videoSearchResults').style.display = 'none';
+        const container = document.getElementById('selectedVideosContainer');
+        if(container.innerHTML.includes('No files selected yet.')) container.innerHTML = '';
+        const div = document.createElement('div');
+        div.style.cssText = "background:var(--bg); border:1px solid var(--border); padding:15px; border-radius:8px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;";
+        div.innerHTML = `
+            <div style="width:100%; font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom:5px;">📁 ${{fileName}}</div>
+            <input type="hidden" name="video_id" value="${{fileId}}">
+            <input type="text" name="video_heading" placeholder="Group Name" class="s-input" style="margin-bottom:0; flex:1; min-width:120px; padding:10px;" required>
+            <input type="text" name="video_name" placeholder="Quality" class="s-input" style="margin-bottom:0; flex:1; min-width:100px; padding:10px; color:var(--accent);" required>
+            <button type="button" onclick="this.parentElement.remove()" style="background:var(--bg3); color:var(--muted); border:1px solid var(--border); padding:10px 15px; border-radius:6px; cursor:pointer; font-weight:bold;">✖</button>`;
+        container.appendChild(div);
+    }}
     </script>
     '''
-    return build_page("Edit Post", form_wrapper("Edit Post", html_content, req.query.get('err',''), req.query.get('msg','')), "login-bg", "posts", role)
+    return build_page("Edit Post", html_content, "", "posts", role)
 
 # ─────────────────────────────────────────────────────────
 # ⚙️ 3. API: PUBLISH & UPDATE POSTS
