@@ -10,7 +10,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#141414;--bg2:#000;--bg3:#2b2b2b;--bg4:#1f1f1f;--card:#181818;--ac:#e50914;--txt:#fff;--mu:#808080;--br:rgba(128,128,128,.2)}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;overflow-x:hidden;padding-bottom:72px;-webkit-user-select:none;user-select:none}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;overflow-x:hidden;padding-bottom:40px;-webkit-user-select:none;user-select:none}
 
 /* topbar */
 .tb{background:var(--bg2);padding:0 16px;height:52px;display:flex;align-items:center;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--br);backdrop-filter:blur(10px)}
@@ -110,21 +110,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
 .pb2:not(:disabled):active{background:var(--ac);color:#fff;border-color:var(--ac);transform:scale(.93)}
 .pi{font-size:12px;font-weight:700;color:var(--mu)}
 
-/* actor grid */
-.ag{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px}
-@media(min-width:480px){.ag{grid-template-columns:repeat(4,1fr)}}
-.act-card{background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--br);cursor:pointer;transition:transform .2s,border-color .2s}
-.act-card:active{transform:scale(.95);border-color:rgba(229,9,20,.5)}
-.act-card [style*="padding-top:135%"]{background:linear-gradient(90deg,var(--bg3) 0,#2a2a38 50%,var(--bg3) 100%);background-size:200% 100%;animation:shimmer 1.5s infinite linear}
-.act-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s}
-.act-poster.on{opacity:1}
 
-/* bottom nav */
-.bn{position:fixed;bottom:0;left:0;right:0;height:56px;background:var(--bg2);border-top:1px solid var(--br);display:flex;z-index:200;backdrop-filter:blur(12px)}
-.bt{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;font-size:9px;font-weight:800;letter-spacing:.5px;color:var(--mu);transition:color .15s;-webkit-tap-highlight-color:transparent;border:none;background:none;font-family:inherit}
-.bi{font-size:20px;line-height:1;transition:transform .2s cubic-bezier(.34,1.4,.64,1)}
-.bt.active{color:var(--ac)}
-.bt.active .bi{transform:scale(1.18)}
+
+
 
 /* card entrance animation */
 @keyframes cardEnter{0%{opacity:0;transform:translateY(36px) scale(.93)}55%{opacity:1;transform:translateY(-5px) scale(1.015)}75%{transform:translateY(2px) scale(.998)}100%{opacity:1;transform:translateY(0) scale(1)}}
@@ -160,7 +148,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
 <div class="tb"><div class="logo"><span class="ni">F</span> FAST FINDER</div></div>
 
 <!-- VIDEOS PAGE -->
-<div class="page active" id="pv">
+
   <div class="sz">
     <div class="sr">
       <div class="sw"><input type="text" id="q" class="si" placeholder="Titles, genres, people…" enterkeyhint="search"></div>
@@ -197,22 +185,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
   </div>
 </div>
 
-<!-- ACTORS PAGE -->
-<div class="page" id="pa">
-  <div class="sz" style="padding-bottom:0">
-    <div class="sr" style="margin-bottom:12px">
-      <div class="sw" style="flex:1"><input type="text" id="actQ" class="si" placeholder="Actor name search…" enterkeyhint="search" oninput="actDeb()"></div>
-    </div>
-  </div>
-  <div class="ag" id="actGrid">
-    <div class="stb" style="grid-column:1/-1"><div class="sti">🎭</div><div class="stt">Loading actors…</div></div>
-  </div>
-  <div class="pg" id="actPgBox">
-    <button class="pb2" id="actPBtn" onclick="actPrev()">◀ Prev</button>
-    <span class="pi" id="actPgInfo">Page 1</span>
-    <button class="pb2" id="actNBtn" onclick="actNext()">Next ▶</button>
-  </div>
-</div>
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
@@ -233,11 +205,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-
 </div>
 <div id="cpToast" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(200px);background:var(--ac);color:#fff;padding:10px 22px;border-radius:30px;font-weight:700;font-size:13px;transition:.3s;z-index:10000;white-space:nowrap;pointer-events:none;opacity:0">Link Copied!</div>
 
-<!-- BOTTOM NAV -->
-<nav class="bn">
-  <button class="bt active" id="tb-pv" onclick="swTab('pv')"><span class="bi">🎬</span>VIDEOS</button>
-  <button class="bt" id="tb-pa" onclick="swTab('pa')"><span class="bi">🎭</span>ACTORS</button>
-</nav>
+
 
 <script>
 const tg=window.Telegram.WebApp;
@@ -249,7 +217,7 @@ const H={'X-Telegram-Init-Data':ID};
 let curQ='',curOff=0,nextOff='',curCol='all',curPage=1;
 let pMode=localStorage.getItem('ff_mode')||'tg';
 let plyr=null,streamUrl='';
-let actPage=1,actOff=0,actNxt='',actDTimer=null,actLoaded=false;
+
 
 // init mode
 if(pMode==='none'){
@@ -313,14 +281,7 @@ document.addEventListener('click',e=>{
   if(!e.target.closest('.cw')){Q('.cm').forEach(m=>m.classList.remove('open'));Q('.cb').forEach(b=>b.classList.remove('open'));}
 });
 
-// tab switching
-function swTab(id){
-  Q('.page').forEach(p=>p.classList.remove('active'));
-  Q('.bt').forEach(b=>b.classList.remove('active'));
-  Q1('#'+id).classList.add('active');
-  Q1('#tb-'+id).classList.add('active');
-  if(id==='pa'&&!actLoaded){actLoaded=true;loadActors(0);}
-}
+
 
 // video search
 Q1('#q').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch(0);});
@@ -423,33 +384,11 @@ function copyLink(){
 function next(){if(nextOff){curPage++;doSearch(nextOff);}}
 function prev(){if(curPage>1){curPage--;doSearch(Math.max(0,curOff-21));}}
 
-// actors
-function actDeb(){clearTimeout(actDTimer);actDTimer=setTimeout(()=>loadActors(0),400);}
-Q1('#actQ').addEventListener('keydown',e=>{if(e.key==='Enter'){clearTimeout(actDTimer);loadActors(0);}});
 
-async function loadActors(off){
-  let q=(Q1('#actQ').value||'').trim(),grid=Q1('#actGrid');
-  actOff=off;if(!off)actPage=1;
-  state('#actGrid','#actPgBox','⏳','Loading...','');
-  try{
-    let r=await fetch(`/api/directory/search?q=${encodeURIComponent(q)}&offset=${off}&mode=poster`,{headers:H});
-    if(!r.ok)return state('#actGrid','#actPgBox','❌','Load failed','');
-    let d=await r.json();
-    if(!d.html||d.html.includes('No profiles'))return state('#actGrid','#actPgBox','🔎','Koi actor nahi mila','');
-    grid.innerHTML=d.html
-      .replace(/onclick="window\.location\.href='\/actor\/([^']+)'"/g,'onclick="openActor(\'$1\')"')
-      .replace(/class="act-poster"/g,'class="act-poster" onload="this.classList.add(\'on\')"');
-    stagger(grid);
-    actNxt=d.has_next?off+20:'';
-    let pb=Q1('#actPgBox');pb.style.display=(off>0||d.has_next)?'flex':'none';
-    Q1('#actPBtn').disabled=!off;Q1('#actNBtn').disabled=!d.has_next;
-    Q1('#actPgInfo').textContent='Page '+actPage;
-    window.scrollTo({top:0,behavior:'smooth'});
-  }catch{state('#actGrid','#actPgBox','❌','Connection fail','');}
-}
-function openActor(id){tg.openLink(location.origin+'/actor/'+id);}
-function actNext(){if(actNxt!==''){actPage++;loadActors(actNxt);}}
-function actPrev(){if(actPage>1){actPage--;loadActors(Math.max(0,actOff-20));}}
+</script>
+<script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+</body>
+</html>
 </script>
 <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
 </body>
