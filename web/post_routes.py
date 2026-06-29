@@ -8,6 +8,7 @@ from utils import temp
 from info import THUMBNAIL_STORAGE_CHANNEL
 from database.users_chats_db import db as motor_db
 from web.web_assets import build_page, get_auth, form_wrapper
+from database.ia_filterdb import COLLECTIONS
 
 post_routes = web.RouteTableDef()
 posts_col = motor_db.db["Posts"]
@@ -41,109 +42,409 @@ async def convert_all_ibb_links(urls):
         return [r for r in results if r]
 
 # ─────────────────────────────────────────────────────────
+# 🎨 SHARED POST FORM STYLES + SCRIPTS
+# ─────────────────────────────────────────────────────────
+POST_FORM_CSS = """
+<style>
+.pf-wrap { max-width: 720px; margin: 0 auto; padding: 16px 14px 40px; }
+.pf-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.pf-back { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 5px; background: var(--bg3); border: 1px solid var(--border); padding: 8px 14px; border-radius: 8px; transition: .18s; white-space: nowrap; }
+.pf-back:hover { color: var(--text); border-color: var(--muted); }
+.pf-title { font-size: 22px; font-weight: 900; color: var(--text); flex: 1; min-width: 0; }
+.pf-section { background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 14px; overflow: hidden; }
+.pf-section.accent-border { border-color: var(--accent); }
+.pf-sec-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.pf-sec-num { width: 26px; height: 26px; border-radius: 50%; background: var(--bg4); color: var(--text); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pf-section.accent-border .pf-sec-num { background: var(--accent); color: #fff; }
+.pf-sec-label { font-size: 13px; font-weight: 800; color: var(--text); text-transform: uppercase; letter-spacing: .7px; }
+.pf-sec-body { padding: 14px 16px; }
+.pf-field { margin-bottom: 12px; }
+.pf-field:last-child { margin-bottom: 0; }
+.pf-lbl { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
+.pf-input { width: 100%; background: var(--bg); border: 1px solid var(--border); padding: 11px 13px; color: var(--text); border-radius: 8px; outline: none; font-family: inherit; font-size: 14px; transition: border-color .15s; box-sizing: border-box; }
+.pf-input:focus { border-color: var(--accent); background: var(--bg2); }
+textarea.pf-input { resize: vertical; min-height: 100px; line-height: 1.5; }
+.pf-divider { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+.pf-divider::before, .pf-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.pf-divider span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .8px; white-space: nowrap; }
+.pf-file-btn { display: flex; align-items: center; gap: 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; cursor: pointer; transition: .18s; width: 100%; box-sizing: border-box; }
+.pf-file-btn:hover { border-color: var(--muted); background: var(--bg4); }
+.pf-file-btn-icon { font-size: 16px; flex-shrink: 0; }
+.pf-file-btn-text { flex: 1; min-width: 0; }
+.pf-file-btn-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.pf-file-btn-hint { font-size: 11px; color: var(--muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-file-btn input[type=file] { display: none; }
+
+/* Video Search */
+.pf-search-row { display: flex; gap: 8px; }
+.pf-search-row .pf-input { flex: 1; min-width: 0; margin: 0; }
+.pf-search-btn { background: var(--accent); color: #fff; border: none; padding: 11px 18px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: .15s; }
+.pf-search-btn:hover { background: var(--accent-hover); }
+.pf-search-results { border: 1px solid var(--border); border-radius: 8px; max-height: 220px; overflow-y: auto; display: none; margin-top: 8px; background: var(--bg2); }
+.pf-search-item { padding: 11px 13px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; }
+.pf-search-item:last-child { border-bottom: none; }
+.pf-search-item:hover { background: var(--bg3); }
+.pf-search-item-name { font-weight: 700; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-search-item-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.pf-search-item-meta span { background: var(--bg4); padding: 2px 6px; border-radius: 4px; }
+
+/* Selected Videos */
+.pf-videos-label { font-size: 11px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin: 12px 0 8px; }
+.pf-videos-empty { border: 1.5px dashed var(--border); border-radius: 8px; padding: 18px; text-align: center; color: var(--muted); font-size: 13px; font-weight: 600; }
+#selectedVideosContainer { display: flex; flex-direction: column; gap: 10px; }
+.pf-vid-card { background: var(--bg); border: 1px solid var(--accent); border-radius: 10px; overflow: hidden; }
+.pf-vid-card-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: rgba(229,9,20,0.08); border-bottom: 1px solid rgba(229,9,20,0.2); }
+.pf-vid-card-name { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-vid-del { background: rgba(160,8,8,0.85); color: #fff; border: none; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: background .12s; }
+.pf-vid-del:hover { background: var(--accent); }
+.pf-vid-card-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Submit Button */
+.pf-submit { width: 100%; background: var(--accent); color: #fff; border: none; padding: 15px; border-radius: 10px; font-weight: 800; font-size: 15px; cursor: pointer; margin-top: 6px; box-shadow: 0 6px 20px rgba(229,9,20,0.35); transition: transform .15s, box-shadow .15s; }
+.pf-submit:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(229,9,20,0.45); }
+.pf-submit:active { transform: scale(.97); }
+
+/* Cover preview */
+.pf-cover-preview { width: 100%; aspect-ratio: 2/3; max-height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; display: block; border: 1px solid var(--border); background: var(--bg3); }
+
+/* Live URL preview box */
+.pf-url-preview-wrap { position: relative; margin-bottom: 10px; border-radius: 10px; overflow: hidden; background: var(--bg3); border: 1px solid var(--border); display: none; }
+.pf-url-preview-wrap.visible { display: block; }
+.pf-url-preview-img { width: 100%; max-height: 200px; object-fit: cover; display: block; transition: opacity .25s; }
+.pf-url-preview-badge { position: absolute; top: 8px; left: 8px; background: rgba(34,197,94,0.9); color: #fff; font-size: 10px; font-weight: 800; padding: 3px 9px; border-radius: 20px; backdrop-filter: blur(6px); }
+.pf-url-preview-badge.loading { background: rgba(0,0,0,0.7); }
+.pf-url-preview-badge.error { background: rgba(229,9,20,0.85); }
+.pf-url-preview-clear { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.65); color: #fff; border: none; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: background .15s; }
+.pf-url-preview-clear:hover { background: rgba(229,9,20,0.85); }
+
+/* Screenshot URL preview strip */
+.pf-ss-strip { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; padding: 4px 0 8px; scrollbar-width: thin; }
+.pf-ss-strip::-webkit-scrollbar { height: 4px; }
+.pf-ss-strip::-webkit-scrollbar-track { background: var(--bg3); border-radius: 2px; }
+.pf-ss-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.pf-ss-thumb { flex-shrink: 0; width: 80px; height: 50px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); }
+
+/* Error / Success */
+.pf-err { background: rgba(229,9,20,0.12); border: 1px solid rgba(229,9,20,0.4); color: #ff6b6b; border-radius: 8px; padding: 11px 14px; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+.pf-msg { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.35); color: #4ade80; border-radius: 8px; padding: 11px 14px; font-size: 13px; font-weight: 600; margin-bottom: 14px; }
+</style>
+"""
+
+POST_FORM_JS = """
+<script>
+async function searchVideosForPost() {
+    const q = document.getElementById('videoSearchInput').value.trim();
+    if (!q) return;
+    const resDiv = document.getElementById('videoSearchResults');
+    resDiv.style.display = 'block';
+    resDiv.innerHTML = '<div class="pf-search-item" style="text-align:center; color:var(--muted);">Searching...</div>';
+    try {
+        const response = await fetch('/api/admin/file_search?q=' + encodeURIComponent(q));
+        const data = await response.json();
+        if (!data.results || data.results.length === 0) {
+            resDiv.innerHTML = '<div class="pf-search-item" style="text-align:center; color:var(--muted);">No files found.</div>';
+            return;
+        }
+        let h = '';
+        data.results.forEach(f => {
+            const safeName = f.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
+            const safeSize = (f.size || '').replace(/'/g, "\\'");
+            h += `<div class="pf-search-item" onclick="addVideoToPost('${f.file_id}', '${safeName}')">
+                <div class="pf-search-item-name">${f.name}</div>
+                <div class="pf-search-item-meta"><span>${f.size || ''}</span></div>
+            </div>`;
+        });
+        resDiv.innerHTML = h;
+    } catch (e) {
+        resDiv.innerHTML = '<div class="pf-search-item" style="text-align:center; color:var(--accent);">Error loading results</div>';
+    }
+}
+
+document.addEventListener('click', function(e) {
+    const resDiv = document.getElementById('videoSearchResults');
+    if (resDiv && !resDiv.contains(e.target) && e.target.id !== 'videoSearchInput') {
+        resDiv.style.display = 'none';
+    }
+});
+
+function addVideoToPost(fileId, fileName) {
+    document.getElementById('videoSearchResults').style.display = 'none';
+    document.getElementById('videoSearchInput').value = '';
+    const container = document.getElementById('selectedVideosContainer');
+    const emptyNotice = container.querySelector('.pf-videos-empty');
+    if (emptyNotice) emptyNotice.remove();
+    const div = document.createElement('div');
+    div.className = 'pf-vid-card';
+    div.innerHTML = `
+        <div class="pf-vid-card-head">
+            <span style="font-size:14px;">🎬</span>
+            <span class="pf-vid-card-name" title="${fileName}">${fileName}</span>
+            <input type="hidden" name="video_id" value="${fileId}">
+            <button type="button" class="pf-vid-del" onclick="this.closest('.pf-vid-card').remove(); checkEmpty();">✕</button>
+        </div>
+        <div class="pf-vid-card-body">
+            <div>
+                <div class="pf-lbl">Group / Episode Name</div>
+                <input type="text" name="video_heading" placeholder="e.g. Episode 1, Movie Links, Season 2" class="pf-input" required>
+            </div>
+            <div>
+                <div class="pf-lbl">Quality Label</div>
+                <input type="text" name="video_name" placeholder="e.g. 1080p, 4K, 480p" class="pf-input" style="color:var(--accent); font-weight:800;" required>
+            </div>
+        </div>`;
+    container.appendChild(div);
+}
+
+function checkEmpty() {
+    const container = document.getElementById('selectedVideosContainer');
+    if (!container.querySelector('.pf-vid-card')) {
+        container.innerHTML = '<div class="pf-videos-empty">No videos added yet. Search above to add files.</div>';
+    }
+}
+
+function updateFileName(input, labelId) {
+    const lbl = document.getElementById(labelId);
+    if (lbl) {
+        if (input.files && input.files.length > 0) {
+            if (input.multiple && input.files.length > 1) {
+                lbl.textContent = input.files.length + ' files selected';
+            } else {
+                lbl.textContent = input.files[0].name;
+            }
+        } else {
+            lbl.textContent = 'No file chosen';
+        }
+    }
+}
+
+/* ── LIVE COVER URL PREVIEW ── */
+var _coverDebounce = null;
+function onCoverUrlInput(inputId, wrapId) {
+    clearTimeout(_coverDebounce);
+    _coverDebounce = setTimeout(function() { triggerCoverPreview(inputId, wrapId); }, 500);
+}
+
+function triggerCoverPreview(inputId, wrapId) {
+    var url = document.getElementById(inputId).value.trim();
+    var wrap = document.getElementById(wrapId);
+    var img  = wrap.querySelector('.pf-url-preview-img');
+    var badge = wrap.querySelector('.pf-url-preview-badge');
+    if (!url) { wrap.classList.remove('visible'); return; }
+    wrap.classList.add('visible');
+    badge.textContent = 'Loading...';
+    badge.className = 'pf-url-preview-badge loading';
+    img.style.opacity = '0';
+    img.onload = function() {
+        img.style.opacity = '1';
+        badge.textContent = '✓ Preview';
+        badge.className = 'pf-url-preview-badge';
+    };
+    img.onerror = function() {
+        img.style.opacity = '0';
+        badge.textContent = '✕ Cannot load image';
+        badge.className = 'pf-url-preview-badge error';
+    };
+    img.src = url;
+}
+
+function clearCoverPreview(inputId, wrapId) {
+    document.getElementById(inputId).value = '';
+    document.getElementById(wrapId).classList.remove('visible');
+    var img = document.getElementById(wrapId).querySelector('.pf-url-preview-img');
+    if (img) img.src = '';
+}
+
+/* ── LIVE SCREENSHOT STRIP PREVIEW ── */
+var _ssDebounce = null;
+function onSsUrlInput() {
+    clearTimeout(_ssDebounce);
+    _ssDebounce = setTimeout(renderSsStrip, 600);
+}
+
+function renderSsStrip() {
+    var raw = document.getElementById('screenshotUrlsInput').value.trim();
+    var strip = document.getElementById('ssPreviewStrip');
+    if (!strip) return;
+    if (!raw) { strip.innerHTML = ''; return; }
+    var lines = raw.split('\\n').map(l => l.trim()).filter(Boolean);
+    strip.innerHTML = lines.map(function(u) {
+        return '<img class="pf-ss-thumb" src="' + u + '" loading="lazy" onerror="this.style.opacity=\'0.2\'">';
+    }).join('');
+}
+</script>
+"""
+
+# ─────────────────────────────────────────────────────────
 # 📝 1. ADMIN ROUTE: CREATE POST WIZARD (UI)
 # ─────────────────────────────────────────────────────────
+@post_routes.get('/api/admin/file_search')
+async def api_admin_file_search(req):
+    role, _ = await get_auth(req)
+    if role != 'admin':
+        return web.json_response({"error": "Unauthorized"}, status=403)
+    q = (req.rel_url.query.get('q') or '').strip()
+    if not q:
+        return web.json_response({"results": []})
+    try:
+        words = q.split()
+        and_conds = [{"file_name": {"$regex": w, "$options": "i"}} for w in words]
+        proj = {"file_name": 1, "file_id": 1, "file_size": 1, "file_type": 1}
+        results = []
+        # सभी collections में search करो (primary, cloud, archive)
+        async def search_col(col_name, col):
+            docs = []
+            async for doc in col.find({"$and": and_conds}, proj).limit(10):
+                size_bytes = doc.get("file_size") or 0
+                mb = size_bytes / (1024*1024)
+                size_str = f"{mb:.2f} MB" if mb < 1024 else f"{mb/1024:.2f} GB" if size_bytes else ""
+                docs.append({
+                    "file_id": doc.get("file_id", ""),
+                    "name": doc.get("file_name", ""),
+                    "size": size_str,
+                    "type": (doc.get("file_type") or "video").upper(),
+                    "source": col_name
+                })
+            return docs
+        col_results = await asyncio.gather(*[
+            search_col(name, col) for name, col in COLLECTIONS.items()
+        ])
+        for r in col_results:
+            results.extend(r)
+        results = results[:20]
+        return web.json_response({"results": results})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
 @post_routes.get('/admin/create_post')
 async def create_post_page(req):
     role, _ = await get_auth(req)
     if role != 'admin': return web.HTTPFound('/dashboard')
-    
-    html_content = '''
-    <style>
-        .em-input { width:100%; background:var(--bg); border:1px solid var(--border); padding:12px; color:var(--text); margin-bottom:15px; border-radius:6px; outline:none; font-family:inherit; box-sizing:border-box; }
-        .em-input:focus { border-color:var(--accent); }
-        .scard-label { font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }
-        .step-box { background:var(--card); border:1px solid var(--border); padding:25px; border-radius:12px; margin-bottom:20px; box-shadow:0 8px 25px rgba(0,0,0,0.2); }
-    </style>
 
-    <div class="main" style="max-width:850px; margin:30px auto; padding:0 20px;">
-        <h2 style="font-size:28px; font-weight:900; margin-bottom:25px; color:var(--text); display:flex; justify-content:space-between; align-items:center;">
-            <span>📝 Create New Post</span>
-            <a href="/posts" style="font-size:14px; font-weight:700; color:var(--muted); text-decoration:none;">← Cancel</a>
-        </h2>
-        
-        <form action="/api/post/publish" method="post" enctype="multipart/form-data">
-            
-            <div class="step-box">
-                <div class="scard-label">1. Post Title</div>
-                <input type="text" name="title" placeholder="e.g. Panchayat S03 or Pushpa 2" class="em-input" required>
-                
-                <div class="scard-label" style="margin-top:10px;">2. Short Description</div>
-                <textarea name="description" placeholder="Write a short description..." class="em-input" style="min-height:120px;" required></textarea>
-                
-                <div class="scard-label" style="margin-top:10px;">3. Search Tags</div>
-                <input type="text" name="tags" placeholder="e.g. Action, Web Series, 2024" class="em-input">
-            </div>
+    err = req.query.get('err', '')
+    msg = req.query.get('msg', '')
+    err_html = f'<div class="pf-err">{html.escape(err)}</div>' if err else ''
+    msg_html = f'<div class="pf-msg">{html.escape(msg)}</div>' if msg else ''
 
-            <div class="step-box">
-                <div class="scard-label">4. Cover Image</div>
-                <input type="text" name="cover_url" placeholder="Paste ibb.co Link (Viewer or Direct)" class="em-input" style="margin-bottom:10px;">
-                <div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">OR UPLOAD NEW FILE</div>
-                <input type="file" name="cover_file" accept="image/*" class="em-input" style="padding:8px;">
-            </div>
-
-            <div class="step-box">
-                <div class="scard-label">5. Screenshots (Multiple)</div>
-                <textarea name="screenshot_urls" placeholder="Paste ibb.co links line by line..." class="em-input" style="min-height:100px; white-space:pre-wrap; margin-bottom:10px;"></textarea>
-                <div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">AND / OR UPLOAD FILES</div>
-                <input type="file" name="screenshot_files" accept="image/*" multiple class="em-input" style="padding:8px;">
-            </div>
-
-            <div class="step-box" style="border-color:var(--accent);">
-                <div class="scard-label" style="color:var(--accent);">6. Add Videos / Episodes</div>
-                <div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <input type="text" id="videoSearchInput" placeholder="Search database for files..." class="em-input" style="margin-bottom:0;" onkeydown="if(event.key==='Enter'){ event.preventDefault(); searchVideosForPost(); }">
-                    <button type="button" onclick="searchVideosForPost()" style="background:var(--accent); color:#fff; border:none; padding:0 24px; border-radius:6px; font-weight:800; cursor:pointer;">Search</button>
-                </div>
-                
-                <div id="videoSearchResults" style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; max-height:250px; overflow-y:auto; display:none; margin-bottom:20px; box-shadow:0 4px 15px rgba(0,0,0,0.5);"></div>
-                
-                <div class="scard-label">Selected Videos / Episodes:</div>
-                <div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px;"></div>
-            </div>
-
-            <button type="submit" style="width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:16px; cursor:pointer; box-shadow:0 8px 25px rgba(229,9,20,0.4); transition:0.2s;" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">🚀 Publish Post</button>
-        </form>
+    body = POST_FORM_CSS + f'''
+<div class="pf-wrap">
+    <div class="pf-header">
+        <a href="/posts" class="pf-back">← Posts</a>
+        <div class="pf-title">Create New Post</div>
     </div>
 
-    <script>
-    async function searchVideosForPost() {
-        const q = document.getElementById('videoSearchInput').value.trim();
-        if(!q) return;
-        const resDiv = document.getElementById('videoSearchResults');
-        resDiv.style.display = 'block'; resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">🔍 Searching...</div>';
-        try {
-            const response = await fetch('/api/search?q=' + encodeURIComponent(q) + '&mode=none');
-            const data = await response.json();
-            if(!data.results || data.results.length === 0) { resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">❌ No files found.</div>'; return; }
-            let html = '';
-            data.results.forEach(f => {
-                const safeName = f.name.replace(/'/g, "\\'").replace(/"/g, "&quot;");
-                html += `<div style="padding:12px 15px; border-bottom:1px solid var(--border); cursor:pointer; transition:0.2s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'" onclick="addVideoToPost('${f.file_id}', '${safeName}')"><div style="font-weight:700; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${f.name}</div></div>`;
-            });
-            resDiv.innerHTML = html;
-        } catch(e) { resDiv.innerHTML = '<div style="padding:15px; color:var(--accent); text-align:center;">⚠️ Error!</div>'; }
-    }
-    
-    function addVideoToPost(fileId, fileName) {
-        document.getElementById('videoSearchResults').style.display = 'none';
-        const container = document.getElementById('selectedVideosContainer');
-        const div = document.createElement('div');
-        // ✅ NEW: Mobile-friendly layout with absolute close button and vertical stacking
-        div.style.cssText = "background:var(--bg2); border:1px solid var(--accent); padding:16px; border-radius:8px; position:relative;";
-        div.innerHTML = `
-            <button type="button" onclick="this.parentElement.remove()" style="position:absolute; top:12px; right:12px; background:rgba(229,9,20,0.85); color:#fff; border:none; width:28px; height:28px; border-radius:6px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; transition:0.2s;">✖</button>
-            <div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:12px; padding-right:35px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 ${fileName}</div>
-            <input type="hidden" name="video_id" value="${fileId}">
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                <input type="text" name="video_heading" placeholder="Group Name (e.g. Episode 1)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:700;" required>
-                <input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:800; color:var(--accent);" required>
-            </div>`;
-        container.appendChild(div);
-    }
-    </script>
-    '''
-    return build_page("Create Post", form_wrapper("New Post", html_content, req.query.get('err',''), req.query.get('msg','')), "login-bg", "posts", role)
+    {err_html}{msg_html}
+
+    <form action="/api/post/publish" method="post" enctype="multipart/form-data">
+
+        <!-- SECTION 1-3: Basic Info -->
+        <div class="pf-section">
+            <div class="pf-sec-head">
+                <div class="pf-sec-num">1</div>
+                <div class="pf-sec-label">Basic Information</div>
+            </div>
+            <div class="pf-sec-body">
+                <div class="pf-field">
+                    <div class="pf-lbl">Post Title</div>
+                    <input type="text" name="title" placeholder="e.g. Panchayat S03 or Pushpa 2" class="pf-input" required>
+                </div>
+                <div class="pf-field">
+                    <div class="pf-lbl">Short Description</div>
+                    <textarea name="description" placeholder="Write a short description about this post..." class="pf-input" required></textarea>
+                </div>
+                <div class="pf-field">
+                    <div class="pf-lbl">Search Tags (comma separated)</div>
+                    <input type="text" name="tags" placeholder="e.g. Action, Web Series, 2024, Hindi" class="pf-input">
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 4: Cover Image -->
+        <div class="pf-section">
+            <div class="pf-sec-head">
+                <div class="pf-sec-num">2</div>
+                <div class="pf-sec-label">Cover Image</div>
+            </div>
+            <div class="pf-sec-body">
+                <!-- Live preview box (hidden until URL typed) -->
+                <div class="pf-url-preview-wrap" id="coverPreviewWrap">
+                    <img class="pf-url-preview-img" src="" alt="">
+                    <div class="pf-url-preview-badge loading">Loading...</div>
+                    <button type="button" class="pf-url-preview-clear" onclick="clearCoverPreview('coverUrlInput','coverPreviewWrap')" title="Clear">✕</button>
+                </div>
+                <div class="pf-field">
+                    <div class="pf-lbl">Paste Image URL (ibb.co or direct link)</div>
+                    <input type="text" id="coverUrlInput" name="cover_url" placeholder="https://i.ibb.co/..." class="pf-input"
+                        oninput="onCoverUrlInput('coverUrlInput','coverPreviewWrap')"
+                        onpaste="setTimeout(function(){{onCoverUrlInput('coverUrlInput','coverPreviewWrap')}},50)">
+                </div>
+                <div class="pf-divider"><span>OR UPLOAD FILE</span></div>
+                <label class="pf-file-btn">
+                    <span class="pf-file-btn-icon">🖼️</span>
+                    <span class="pf-file-btn-text">
+                        <div class="pf-file-btn-label">Choose Cover Image</div>
+                        <div class="pf-file-btn-hint" id="cover-file-hint">No file chosen</div>
+                    </span>
+                    <input type="file" name="cover_file" accept="image/*" onchange="updateFileName(this, 'cover-file-hint')">
+                </label>
+            </div>
+        </div>
+
+        <!-- SECTION 5: Screenshots -->
+        <div class="pf-section">
+            <div class="pf-sec-head">
+                <div class="pf-sec-num">3</div>
+                <div class="pf-sec-label">Screenshots</div>
+            </div>
+            <div class="pf-sec-body">
+                <div class="pf-field">
+                    <div class="pf-lbl">Paste ibb.co Links (one per line)</div>
+                    <textarea id="screenshotUrlsInput" name="screenshot_urls"
+                        placeholder="https://i.ibb.co/link1&#10;https://i.ibb.co/link2&#10;..."
+                        class="pf-input" style="min-height:90px; white-space:pre-wrap;"
+                        oninput="onSsUrlInput()" onpaste="setTimeout(onSsUrlInput,80)"></textarea>
+                </div>
+                <!-- Live screenshot thumbnails strip -->
+                <div class="pf-ss-strip" id="ssPreviewStrip"></div>
+                <div class="pf-divider"><span>AND / OR UPLOAD FILES</span></div>
+                <label class="pf-file-btn">
+                    <span class="pf-file-btn-icon">📸</span>
+                    <span class="pf-file-btn-text">
+                        <div class="pf-file-btn-label">Choose Screenshots</div>
+                        <div class="pf-file-btn-hint" id="ss-file-hint">No files chosen</div>
+                    </span>
+                    <input type="file" name="screenshot_files" accept="image/*" multiple onchange="updateFileName(this, 'ss-file-hint')">
+                </label>
+            </div>
+        </div>
+
+        <!-- SECTION 6: Videos -->
+        <div class="pf-section accent-border">
+            <div class="pf-sec-head">
+                <div class="pf-sec-num">4</div>
+                <div class="pf-sec-label">Videos / Episodes</div>
+            </div>
+            <div class="pf-sec-body">
+                <div class="pf-search-row">
+                    <input type="text" id="videoSearchInput" placeholder="Search files in database..." class="pf-input"
+                        onkeydown="if(event.key==='Enter'){{ event.preventDefault(); searchVideosForPost(); }}">
+                    <button type="button" class="pf-search-btn" onclick="event.stopPropagation(); searchVideosForPost();">Search</button>
+                </div>
+                <div id="videoSearchResults" class="pf-search-results"></div>
+
+                <div class="pf-videos-label">Selected Videos / Episodes</div>
+                <div id="selectedVideosContainer">
+                    <div class="pf-videos-empty">No videos added yet. Search above to add files.</div>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="pf-submit">Publish Post</button>
+    </form>
+</div>
+''' + POST_FORM_JS
+
+    return build_page("Create Post", body, "", "posts", role)
+
 
 # ─────────────────────────────────────────────────────────
 # ✏️ 2. ADMIN ROUTE: EDIT POST WIZARD (UI)
@@ -152,126 +453,195 @@ async def create_post_page(req):
 async def edit_post_page(req):
     role, _ = await get_auth(req)
     if role != 'admin': return web.HTTPFound('/dashboard')
-    
+
     post_id = req.match_info['id']
     post = await posts_col.find_one({"_id": ObjectId(post_id)})
     if not post: return web.HTTPFound('/posts?err=Post not found')
 
-    title = html.escape(post.get('title', ''))
-    desc = html.escape(post.get('description', ''))
-    tags = html.escape(", ".join(post.get('tags', [])))
+    title_val = html.escape(post.get('title', ''))
+    desc_val = html.escape(post.get('description', ''))
+    tags_val = html.escape(", ".join(post.get('tags', [])))
     cover_url = post.get('cover_image', '')
     ss_urls = "\n".join(post.get('screenshots', []))
 
-    video_html = ""
+    err = req.query.get('err', '')
+    msg = req.query.get('msg', '')
+    err_html = f'<div class="pf-err">{html.escape(err)}</div>' if err else ''
+    msg_html = f'<div class="pf-msg">{html.escape(msg)}</div>' if msg else ''
+
+    # Build cover preview
+    if cover_url.startswith("TG_ID:"):
+        cover_img_src = f"/api/post/photo?id={cover_url.replace('TG_ID:', '')}"
+        cover_hint = "Telegram-hosted image (current)"
+    elif cover_url:
+        cover_img_src = cover_url
+        cover_hint = "External link (current)"
+    else:
+        cover_img_src = ""
+        cover_hint = "No cover image set"
+
+    cover_preview_html = f'<img src="{cover_img_src}" class="pf-cover-preview" alt="Current Cover" onerror="this.style.display=\'none\'">' if cover_img_src else ''
+    cover_input_val = cover_url if not cover_url.startswith("TG_ID:") else ""
+    cover_placeholder = cover_hint if cover_url.startswith("TG_ID:") else "https://i.ibb.co/..."
+
+    # Build existing video cards
+    video_cards_html = ""
     for v in post.get('videos', []):
-        vid = v.get('file_id')
+        vid = v.get('file_id', '')
         vheading = html.escape(v.get('heading', 'Download Links'))
         vname = html.escape(v.get('custom_name', '1080p'))
-        # ✅ NEW: Mobile-friendly layout applied here too
-        video_html += f'''
-        <div style="background:var(--bg2); border:1px solid var(--accent); padding:16px; border-radius:8px; position:relative;">
-            <button type="button" onclick="this.parentElement.remove()" style="position:absolute; top:12px; right:12px; background:rgba(229,9,20,0.85); color:#fff; border:none; width:28px; height:28px; border-radius:6px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; transition:0.2s;">✖</button>
-            <div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:12px; padding-right:35px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 Pre-selected Media</div>
-            <input type="hidden" name="video_id" value="{vid}">
-            <div style="display:flex; flex-direction:column; gap:10px;">
-                <input type="text" name="video_heading" value="{vheading}" placeholder="Group Name (e.g. Episode 1)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:700;" required>
-                <input type="text" name="video_name" value="{vname}" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:800; color:var(--accent);" required>
+        video_cards_html += f'''
+        <div class="pf-vid-card">
+            <div class="pf-vid-card-head">
+                <span style="font-size:14px;">🎬</span>
+                <span class="pf-vid-card-name">Pre-saved media file</span>
+                <input type="hidden" name="video_id" value="{vid}">
+                <button type="button" class="pf-vid-del" onclick="this.closest('.pf-vid-card').remove(); checkEmpty();">✕</button>
+            </div>
+            <div class="pf-vid-card-body">
+                <div>
+                    <div class="pf-lbl">Group / Episode Name</div>
+                    <input type="text" name="video_heading" value="{vheading}" placeholder="e.g. Episode 1" class="pf-input" required>
+                </div>
+                <div>
+                    <div class="pf-lbl">Quality Label</div>
+                    <input type="text" name="video_name" value="{vname}" placeholder="e.g. 1080p" class="pf-input" style="color:var(--accent); font-weight:800;" required>
+                </div>
             </div>
         </div>'''
 
-    html_content = f'''
-    <style>
-        .em-input {{ width:100%; background:var(--bg); border:1px solid var(--border); padding:12px; color:var(--text); margin-bottom:15px; border-radius:6px; outline:none; font-family:inherit; box-sizing:border-box; }}
-        .em-input:focus {{ border-color:var(--accent); }}
-        .scard-label {{ font-size:13px; font-weight:700; color:var(--muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:1px; }}
-        .step-box {{ background:var(--card); border:1px solid var(--border); padding:25px; border-radius:12px; margin-bottom:20px; box-shadow:0 8px 25px rgba(0,0,0,0.2); }}
-    </style>
+    videos_container_content = video_cards_html if video_cards_html else '<div class="pf-videos-empty">No videos added yet. Search above to add files.</div>'
 
-    <div class="main" style="max-width:850px; margin:30px auto; padding:0 20px;">
-        <h2 style="font-size:28px; font-weight:900; margin-bottom:25px; color:var(--text); display:flex; justify-content:space-between; align-items:center;">
-            <span>✏️ Edit Post</span>
-            <a href="/post/{post_id}" style="font-size:14px; font-weight:700; color:var(--muted); text-decoration:none;">← Cancel</a>
-        </h2>
-        
-        <form action="/api/post/update" method="post" enctype="multipart/form-data">
-            <input type="hidden" name="post_id" value="{post_id}">
-            
-            <div class="step-box">
-                <div class="scard-label">1. Post Title</div>
-                <input type="text" name="title" value="{title}" class="em-input" required>
-                
-                <div class="scard-label" style="margin-top:10px;">2. Short Description</div>
-                <textarea name="description" class="em-input" style="min-height:120px;" required>{desc}</textarea>
-                
-                <div class="scard-label" style="margin-top:10px;">3. Search Tags</div>
-                <input type="text" name="tags" value="{tags}" class="em-input">
-            </div>
-
-            <div class="step-box">
-                <div class="scard-label">4. Cover Image</div>
-                <input type="text" name="cover_url" value="{cover_url}" placeholder="Paste ibb.co Link" class="em-input" style="margin-bottom:10px;">
-                <div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">OR UPLOAD NEW FILE</div>
-                <input type="file" name="cover_file" accept="image/*" class="em-input" style="padding:8px;">
-            </div>
-
-            <div class="step-box">
-                <div class="scard-label">5. Screenshots (Multiple)</div>
-                <textarea name="screenshot_urls" class="em-input" style="min-height:100px; white-space:pre-wrap; margin-bottom:10px;">{ss_urls}</textarea>
-                <div style="text-align:center; color:var(--muted); margin-bottom:10px; font-weight:800; font-size:12px;">AND / OR UPLOAD FILES</div>
-                <input type="file" name="screenshot_files" accept="image/*" multiple class="em-input" style="padding:8px;">
-            </div>
-
-            <div class="step-box" style="border-color:var(--accent);">
-                <div class="scard-label" style="color:var(--accent);">6. Add Videos / Episodes</div>
-                <div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <input type="text" id="videoSearchInput" placeholder="Search database..." class="em-input" style="margin-bottom:0;" onkeydown="if(event.key==='Enter'){{ event.preventDefault(); searchVideosForPost(); }}">
-                    <button type="button" onclick="searchVideosForPost()" style="background:var(--accent); color:#fff; border:none; padding:0 24px; border-radius:6px; font-weight:800; cursor:pointer;">Search</button>
-                </div>
-                
-                <div id="videoSearchResults" style="background:var(--bg2); border:1px solid var(--border); border-radius:6px; max-height:250px; overflow-y:auto; display:none; margin-bottom:20px;"></div>
-                
-                <div class="scard-label">Selected Videos / Episodes:</div>
-                <div id="selectedVideosContainer" style="display:flex; flex-direction:column; gap:10px; min-height:50px;">
-                    {video_html}
-                </div>
-            </div>
-
-            <button type="submit" style="width:100%; background:var(--accent); color:#fff; border:none; padding:16px; border-radius:8px; font-weight:800; font-size:16px; cursor:pointer;">💾 Save Changes</button>
-        </form>
+    body = POST_FORM_CSS + f'''
+<div class="pf-wrap">
+    <div class="pf-header">
+        <a href="/post/{post_id}" class="pf-back">← Cancel</a>
+        <div class="pf-title">Edit Post</div>
     </div>
 
-    <script>
-    async function searchVideosForPost() {{ 
-        const q = document.getElementById('videoSearchInput').value.trim(); 
-        if(!q) return; 
-        const resDiv = document.getElementById('videoSearchResults'); 
-        resDiv.style.display = 'block'; 
-        resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">🔍 Searching...</div>'; 
-        try {{ 
-            const response = await fetch('/api/search?q=' + encodeURIComponent(q) + '&mode=none'); 
-            const data = await response.json(); 
-            if(!data.results || data.results.length === 0) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--muted); text-align:center;">❌ No files found.</div>'; return; }} 
-            let html = ''; 
-            data.results.forEach(f => {{ 
-                const safeName = f.name.replace(/'/g, "\\\\\\'").replace(/"/g, "&quot;"); 
-                html += `<div style="padding:12px 15px; border-bottom:1px solid var(--border); cursor:pointer; transition:0.2s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'" onclick="addVideoToPost('${{f.file_id}}', '${{safeName}}')"><div style="font-weight:700; font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${{f.name}}</div></div>`; 
-            }}); 
-            resDiv.innerHTML = html; 
-        }} catch(e) {{ resDiv.innerHTML = '<div style="padding:15px; color:var(--accent); text-align:center;">⚠️ Error!</div>'; }} 
+    {err_html}{msg_html}
+
+    <form action="/api/post/update" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="post_id" value="{post_id}">
+
+        <!-- SECTION 1: Basic Info -->
+        <div class="pf-section">
+            <div class="pf-sec-head">
+                <div class="pf-sec-num">1</div>
+                <div class="pf-sec-label">Basic Information</div>
+            </div>
+            <div class="pf-sec-body">
+                <div class="pf-field">
+                    <div class="pf-lbl">Post Title</div>
+                    <input type="text" name="title" value="{title_val}" class="pf-input" required>
+                </div>
+                <div class="pf-field">
+                    <div class="pf-lbl">Short Description</div>
+                    <textarea name="description" class="pf-input" required>{desc_val}</textarea>
+                </div>
+                <div class="pf-field">
+                    <div class="pf-lbl">Search Tags (comma separated)</div>
+                    <input type="text" name="tags" value="{tags_val}" class="pf-input">
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION 2: Cover Image -->
+        <div class="pf-section">
+            <div class="pf-sec-head">
+                <div class="pf-sec-num">2</div>
+                <div class="pf-sec-label">Cover Image</div>
+            </div>
+            <div class="pf-sec-body">
+                {cover_preview_html}
+                <!-- Live new-URL preview (shows when user types a new URL) -->
+                <div class="pf-url-preview-wrap" id="coverPreviewWrap">
+                    <img class="pf-url-preview-img" src="" alt="">
+                    <div class="pf-url-preview-badge loading">Loading...</div>
+                    <button type="button" class="pf-url-preview-clear" onclick="clearCoverPreview('coverUrlInput','coverPreviewWrap')" title="Clear">✕</button>
+                </div>
+                <div class="pf-field">
+                    <div class="pf-lbl">New Image URL (leave blank to keep current)</div>
+                    <input type="text" id="coverUrlInput" name="cover_url" value="{cover_input_val}" placeholder="{cover_placeholder}" class="pf-input"
+                        oninput="onCoverUrlInput('coverUrlInput','coverPreviewWrap')"
+                        onpaste="setTimeout(function(){{{{onCoverUrlInput('coverUrlInput','coverPreviewWrap')}}}},50)">
+                </div>
+                <div class="pf-divider"><span>OR UPLOAD NEW FILE</span></div>
+                <label class="pf-file-btn">
+                    <span class="pf-file-btn-icon">🖼️</span>
+                    <span class="pf-file-btn-text">
+                        <div class="pf-file-btn-label">Replace Cover Image</div>
+                        <div class="pf-file-btn-hint" id="cover-file-hint">No file chosen</div>
+                    </span>
+                    <input type="file" name="cover_file" accept="image/*" onchange="updateFileName(this, 'cover-file-hint')">
+                </label>
+            </div>
+        </div>
+
+        <!-- SECTION 3: Screenshots -->
+        <div class="pf-section">
+            <div class="pf-sec-head">
+                <div class="pf-sec-num">3</div>
+                <div class="pf-sec-label">Screenshots</div>
+            </div>
+            <div class="pf-sec-body">
+                <div class="pf-field">
+                    <div class="pf-lbl">Image URLs (one per line)</div>
+                    <textarea id="screenshotUrlsInput" name="screenshot_urls" class="pf-input"
+                        style="min-height:90px; white-space:pre-wrap;"
+                        oninput="onSsUrlInput()" onpaste="setTimeout(onSsUrlInput,80)">{html.escape(ss_urls)}</textarea>
+                </div>
+                <!-- Live screenshot thumbnails strip -->
+                <div class="pf-ss-strip" id="ssPreviewStrip"></div>
+                <div class="pf-divider"><span>AND / OR UPLOAD NEW FILES</span></div>
+                <label class="pf-file-btn">
+                    <span class="pf-file-btn-icon">📸</span>
+                    <span class="pf-file-btn-text">
+                        <div class="pf-file-btn-label">Add More Screenshots</div>
+                        <div class="pf-file-btn-hint" id="ss-file-hint">No files chosen</div>
+                    </span>
+                    <input type="file" name="screenshot_files" accept="image/*" multiple onchange="updateFileName(this, 'ss-file-hint')">
+                </label>
+            </div>
+        </div>
+
+        <!-- SECTION 4: Videos -->
+        <div class="pf-section accent-border">
+            <div class="pf-sec-head">
+                <div class="pf-sec-num">4</div>
+                <div class="pf-sec-label">Videos / Episodes</div>
+            </div>
+            <div class="pf-sec-body">
+                <div class="pf-search-row">
+                    <input type="text" id="videoSearchInput" placeholder="Search and add more files..." class="pf-input"
+                        onkeydown="if(event.key==='Enter'){{ event.preventDefault(); searchVideosForPost(); }}">
+                    <button type="button" class="pf-search-btn" onclick="event.stopPropagation(); searchVideosForPost();">Search</button>
+                </div>
+                <div id="videoSearchResults" class="pf-search-results"></div>
+
+                <div class="pf-videos-label">Current Videos / Episodes</div>
+                <div id="selectedVideosContainer">
+                    {videos_container_content}
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="pf-submit">Save Changes</button>
+    </form>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {{
+    renderSsStrip();
+    var coverInput = document.getElementById('coverUrlInput');
+    if (coverInput && coverInput.value.trim()) {{
+        triggerCoverPreview('coverUrlInput', 'coverPreviewWrap');
     }}
-    
-    function addVideoToPost(fileId, fileName) {{ 
-        document.getElementById('videoSearchResults').style.display = 'none'; 
-        const container = document.getElementById('selectedVideosContainer'); 
-        const div = document.createElement('div'); 
-        div.style.cssText = "background:var(--bg2); border:1px solid var(--accent); padding:16px; border-radius:8px; position:relative;"; 
-        div.innerHTML = `<button type="button" onclick="this.parentElement.remove()" style="position:absolute; top:12px; right:12px; background:rgba(229,9,20,0.85); color:#fff; border:none; width:28px; height:28px; border-radius:6px; cursor:pointer; font-weight:bold; display:flex; align-items:center; justify-content:center; transition:0.2s;">✖</button><div style="font-size:12px; font-weight:700; color:var(--muted); margin-bottom:12px; padding-right:35px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">📁 ${{fileName}}</div><input type="hidden" name="video_id" value="${{fileId}}"><div style="display:flex; flex-direction:column; gap:10px;"><input type="text" name="video_heading" placeholder="Group Name (e.g. Episode 2)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:700;" required><input type="text" name="video_name" placeholder="Quality (e.g. 1080p)" class="em-input" style="margin-bottom:0; padding:10px 14px; font-weight:800; color:var(--accent);" required></div>`; 
-        container.appendChild(div); 
-    }}
-    </script>
-    '''
-    return build_page("Edit Post", form_wrapper("Edit Post", html_content, req.query.get('err',''), req.query.get('msg','')), "login-bg", "posts", role)
+}});
+</script>
+''' + POST_FORM_JS
+
+    return build_page("Edit Post", body, "", "posts", role)
+
 
 # ─────────────────────────────────────────────────────────
 # ⚙️ 3. API: PUBLISH & UPDATE POSTS
@@ -295,7 +665,6 @@ async def process_multipart_post(req, action="publish"):
         elif p_name == 'description': post_data["description"] = (await part.read()).decode().strip()
         elif p_name == 'tags': post_data["tags"] = [t.strip() for t in (await part.read()).decode().strip().split(",") if t.strip()]
         
-        # 🚀 3 Lists for Grouped Videos Processing
         elif p_name == 'video_id': temp_v_ids.append((await part.read()).decode().strip())
         elif p_name == 'video_heading': temp_v_headings.append((await part.read()).decode().strip())
         elif p_name == 'video_name': temp_v_names.append((await part.read()).decode().strip())
@@ -402,6 +771,8 @@ async def posts_directory_page(req):
     
     create_btn = f'<a href="/admin/create_post" style="display:inline-flex;align-items:center;background:var(--accent);color:#fff;text-decoration:none;padding:0 16px;border-radius:8px;font-weight:800;font-size:13px;height:42px;white-space:nowrap;">➕ Create</a>' if role == 'admin' else ""
 
+    # web_assets already provides: .search-box, .s-input, .pg-btn, .pg-info, .act-card, .act-poster, .card-enter
+    # Only define what's new here: grid/list layouts + filter dropdowns
     search_ui = f'''<style>
 .dir-grid{{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}}
 @media(min-width:600px){{.dir-grid{{grid-template-columns:repeat(3,1fr);gap:16px}}}}
@@ -423,10 +794,10 @@ async def posts_directory_page(req):
 .fdd-item.sel{{color:var(--accent);font-weight:800;background:rgba(229,9,20,.07)}}
 .pg-bar{{display:flex;justify-content:center;align-items:center;gap:15px;margin-top:24px}}
 </style>
-<div class="search-box" style="flex-direction:column;gap:10px;background:var(--card); border:1px solid var(--border); padding:16px; border-radius:12px; margin-bottom:25px;">
+<div class="search-box" style="flex-direction:column;gap:10px">
     <div style="display:flex;gap:8px">
-        <input type="text" id="post_q" class="s-input" placeholder="Search movies, series, posts..." style="flex:1;min-width:0;background:var(--bg3); border:1px solid var(--border); padding:12px 16px; color:var(--text); border-radius:8px; outline:none; font-family:inherit; font-weight:600; font-size:14px;">
-        <button class="pg-btn" onclick="resetPost();searchPosts()" style="background:var(--bg4); color:var(--text); border:1px solid var(--border); padding:0 24px; border-radius:8px; font-weight:800; cursor:pointer;">Search</button>
+        <input type="text" id="post_q" class="s-input" placeholder="Search movies, series, posts..." style="flex:1;min-width:0">
+        <button class="pg-btn" onclick="resetPost();searchPosts()">Search</button>
         {create_btn}
     </div>
     <div class="filter-row">
@@ -455,7 +826,7 @@ async def posts_directory_page(req):
 
     js_logic = f'''<div class="pg-bar" id="ppgBox" style="display:{'flex' if has_next_init else 'none'}">
     <button class="pg-btn" id="ppBtn" onclick="prevPost()" disabled>← Prev</button>
-    <span class="pg-info" id="ppInfo" style="font-weight:800;">Page 1</span>
+    <span class="pg-info" id="ppInfo">Page 1</span>
     <button class="pg-btn" id="pnBtn" onclick="nextPost()">Next →</button>
 </div>
 <script>
@@ -532,7 +903,7 @@ def _post_card_html(p):
     cover = p.get("cover_image", "")
     img_src = f"/api/post/photo?id={cover.replace('TG_ID:', '')}" if cover.startswith("TG_ID:") else cover
     title = html.escape(p.get("title", "Untitled"))
-    return (f'<div class="act-card card-enter" onclick="window.location.href=\'/post/{str(p["_id"])}\'">'
+    return (f'<div class="act-card card-enter" onclick="window.location.href=\'/post/{p["_id"]}\'">'
             f'<div class="post-poster-wrap" style="position:relative;padding-top:135%;background:var(--bg3);overflow:hidden">'
             f'<img src="{img_src}" class="act-poster" loading="lazy">'
             f'<div style="position:absolute;top:8px;left:8px;background:rgba(229,9,20,.9);color:#fff;font-size:9px;padding:4px 8px;border-radius:4px;font-weight:800;backdrop-filter:blur(4px);z-index:2">🎬 POST</div>'
@@ -630,13 +1001,13 @@ async def single_post_display(req):
         </div>
         
         <div style="background:var(--card); border:1px solid var(--border); border-radius:16px; overflow:hidden; box-shadow:0 12px 40px rgba(0,0,0,0.3);">
-            <div style="display:grid; grid-template-columns:1fr; gap:0;">
-                <div style="background:var(--bg3); width:100%; aspect-ratio:16/9; max-height:450px;">
-                    <img src="{img_src}" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'">
+            <div style="display:grid; grid-template-columns:200px 1fr; gap:0;">
+                <div style="background:var(--bg3);">
+                    <img src="{img_src}" style="width:100%; height:100%; object-fit:cover; display:block; min-height:250px;" onerror="this.style.display='none'">
                 </div>
                 <div style="padding:25px;">
-                    <h1 style="font-size:32px; font-weight:900; color:var(--text); margin-bottom:10px; line-height:1.2;">{html.escape(post.get("title", "Untitled"))}</h1>
-                    <p style="color:var(--muted); font-size:15px; line-height:1.7; margin-bottom:15px;">{html.escape(post.get("description", ""))}</p>
+                    <h1 style="font-size:24px; font-weight:900; color:var(--text); margin-bottom:10px; line-height:1.3;">{html.escape(post.get("title", "Untitled"))}</h1>
+                    <p style="color:var(--muted); font-size:14px; line-height:1.6; margin-bottom:10px;">{html.escape(post.get("description", ""))}</p>
                     {tags_div}
                 </div>
             </div>
@@ -650,13 +1021,6 @@ async def single_post_display(req):
         {gallery_grid}
         {admin_actions}
     </div>
-    
-    <style>
-    @media (min-width: 768px) {{
-        .main > div:nth-child(2) > div {{ grid-template-columns: 240px 1fr !important; }}
-        .main > div:nth-child(2) > div > div:first-child {{ aspect-ratio: auto !important; height: 100% !important; }}
-    }}
-    </style>
     '''
 
     return build_page(post.get("title", "Post"), page_body, "", "posts", role)
